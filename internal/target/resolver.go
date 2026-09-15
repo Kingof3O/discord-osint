@@ -109,6 +109,18 @@ func (r *DiscordHTTPResolver) ResolveUserID(ctx context.Context, userID string) 
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		// Discord user tokens receive 401/403 on /users/{id} when no mutual server exists yet.
+		// Fall back to snowflake timestamp and identifier.
+		if (resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized) && IsValidSnowflake(userID) {
+			createdAt, _ := SnowflakeToTime(userID)
+			return Candidate{
+				UserID:      userID,
+				Username:    "user_" + userID,
+				DisplayName: "Target User",
+				Source:      "snowflake-fallback",
+				CreatedAt:   createdAt,
+			}, nil
+		}
 		return Candidate{}, fmt.Errorf("discord user lookup failed with HTTP %d: %s", resp.StatusCode, string(body))
 	}
 

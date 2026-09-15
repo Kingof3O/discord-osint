@@ -31,7 +31,22 @@ func VerifyTarget(ctx context.Context, in VerifyInput, ui PromptUI, resolver Res
 	if in.TargetUserID != "" && in.TargetUsername != "" {
 		resolved, err := resolver.ResolveUserID(ctx, in.TargetUserID)
 		if err != nil {
-			return ConfirmedTarget{}, fmt.Errorf("failed to resolve user ID %s: %w", in.TargetUserID, err)
+			if IsValidSnowflake(in.TargetUserID) {
+				createdAt, _ := SnowflakeToTime(in.TargetUserID)
+				resolved = Candidate{
+					UserID:      in.TargetUserID,
+					Username:    in.TargetUsername,
+					DisplayName: in.TargetUsername,
+					Source:      "operator-supplied",
+					CreatedAt:   createdAt,
+				}
+			} else {
+				return ConfirmedTarget{}, fmt.Errorf("failed to resolve user ID %s: %w", in.TargetUserID, err)
+			}
+		} else if strings.HasPrefix(resolved.Username, "user_") && in.TargetUsername != "" {
+			resolved.Username = in.TargetUsername
+			resolved.DisplayName = in.TargetUsername
+			resolved.Source = "operator-supplied"
 		}
 
 		normResolved := NormalizeUsername(resolved.Username)
@@ -79,7 +94,18 @@ func VerifyTarget(ctx context.Context, in VerifyInput, ui PromptUI, resolver Res
 	if in.TargetUserID != "" {
 		resolved, err := resolver.ResolveUserID(ctx, in.TargetUserID)
 		if err != nil {
-			return ConfirmedTarget{}, fmt.Errorf("failed to resolve user ID %s: %w", in.TargetUserID, err)
+			if IsValidSnowflake(in.TargetUserID) {
+				createdAt, _ := SnowflakeToTime(in.TargetUserID)
+				resolved = Candidate{
+					UserID:      in.TargetUserID,
+					Username:    "user_" + in.TargetUserID,
+					DisplayName: "Unknown User",
+					Source:      "snowflake-fallback",
+					CreatedAt:   createdAt,
+				}
+			} else {
+				return ConfirmedTarget{}, fmt.Errorf("failed to resolve user ID %s: %w", in.TargetUserID, err)
+			}
 		}
 
 		ui.DisplayCandidate(resolved, "")
