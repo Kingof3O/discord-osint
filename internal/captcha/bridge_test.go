@@ -8,9 +8,27 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
+
+type safeBuffer struct {
+	buf bytes.Buffer
+	mu  sync.RWMutex
+}
+
+func (s *safeBuffer) Write(p []byte) (n int, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *safeBuffer) String() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.buf.String()
+}
 
 func TestBridge_HTTPPostSubmit(t *testing.T) {
 	cfg := Config{
@@ -21,7 +39,7 @@ func TestBridge_HTTPPostSubmit(t *testing.T) {
 	}
 
 	bridge := NewInteractiveBridge(cfg)
-	var output bytes.Buffer
+	var output safeBuffer
 	var input bytes.Buffer
 	bridge.SetIO(&input, &output)
 
@@ -117,7 +135,7 @@ func TestBridge_CLIInput_PasteToken(t *testing.T) {
 	}
 
 	bridge := NewInteractiveBridge(cfg)
-	var output bytes.Buffer
+	var output safeBuffer
 	input := bytes.NewBufferString("pasted-secret-captcha-token-from-user-terminal\n")
 	bridge.SetIO(input, &output)
 
@@ -144,7 +162,7 @@ func TestBridge_CLIInput_Skip(t *testing.T) {
 	}
 
 	bridge := NewInteractiveBridge(cfg)
-	var output bytes.Buffer
+	var output safeBuffer
 	input := bytes.NewBufferString("s\n")
 	bridge.SetIO(input, &output)
 
@@ -164,7 +182,7 @@ func TestBridge_CLIInput_Abort(t *testing.T) {
 	}
 
 	bridge := NewInteractiveBridge(cfg)
-	var output bytes.Buffer
+	var output safeBuffer
 	input := bytes.NewBufferString("q\n")
 	bridge.SetIO(input, &output)
 
@@ -184,7 +202,7 @@ func TestBridge_Timeout(t *testing.T) {
 	}
 
 	bridge := NewInteractiveBridge(cfg)
-	var output bytes.Buffer
+	var output safeBuffer
 	var emptyInput bytes.Buffer
 	bridge.SetIO(&emptyInput, &output)
 
