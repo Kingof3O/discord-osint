@@ -109,3 +109,121 @@ func TestAIClient_TriageEvidence(t *testing.T) {
 		t.Errorf("unexpected summary: %s", summary)
 	}
 }
+
+func TestAIClient_Retry429_RetryAfter(t *testing.T) {
+	var attempts int64
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		current := atomic.AddInt64(&attempts, 1)
+		if current == 1 {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte(`{"error": "rate limited"}`))
+			return
+		}
+
+		resp := chatCompletionResponse{
+			Choices: []struct {
+				Message chatMessage `json:"message"`
+			}{
+				{Message: chatMessage{Content: "Success after 429."}},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	client := NewClient(ClientOptions{
+		APIKey:         "key",
+		BaseURL:        ts.URL,
+		HTTPClient:     ts.Client(),
+		MaxRetries:     3,
+		InitialBackoff: 10 * time.Millisecond,
+	})
+
+	ans, err := client.Complete(context.Background(), "sys", "usr")
+	if err != nil {
+		t.Fatalf("Complete failed after 429: %v", err)
+	}
+	if ans != "Success after 429." {
+		t.Errorf("unexpected answer: %s", ans)
+	}
+	if atomic.LoadInt64(&attempts) != 2 {
+		t.Errorf("expected 2 attempts, got %d", atomic.LoadInt64(&attempts))
+	}
+}
+
+func TestAIClient_Retry500_ExponentialBackoff(t *testing.T) {
+	var attempts int64
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		current := atomic.AddInt64(&attempts, 1)
+		if current < 3 {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"error": "internal server error"}`))
+			return
+		}
+
+		resp := chatCompletionResponse{
+			Choices: []struct {
+				Message chatMessage `json:"message"`
+			}{
+				{Message: chatMessage{Content: "Success after 500s."}},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer ts.Close()
+
+	client := NewClient(ClientOptions{
+		APIKey:         "key",
+		BaseURL:        ts.URL,
+		HTTPClient:     ts.Client(),
+		MaxRetries:     3,
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     50 * time.Millisecond,
+	})
+
+	ans, err := client.Complete(context.Background(), "sys", "usr")
+	if err != nil {
+		t.Fatalf("Complete failed after 500s: %v", err)
+	}
+	if ans != "Success after 500s." {
+		t.Errorf("unexpected answer: %s", ans)
+	}
+	if atomic.LoadInt64(&attempts) != 3 {
+		t.Errorf("expected 3 attempts, got %d", atomic.LoadInt64(&attempts))
+	}
+}
+
+func TestAIClient_RetryExhausted(t *testing.T) {
+	var attempts int64
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&attempts, 1)
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"error": "rate limit persistent"}`))
+	}))
+	defer ts.Close()
+
+	client := NewClient(ClientOptions{
+		APIKey:         "key",
+		BaseURL:        ts.URL,
+		HTTPClient:     ts.Client(),
+		MaxRetries:     2,
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     20 * time.Millisecond,
+	})
+
+	_, err := client.Complete(context.Background(), "sys", "usr")
+	if err == nil {
+		t.Fatalf("expected error after exhausting retries, got nil")
+	}
+	// Initial attempt + 2 retries = 3 attempts
+	if atomic.LoadInt64(&attempts) != 3 {
+		t.Errorf("expected 3 attempts (1 initial + 2 retries), got %d", atomic.LoadInt64(&attempts))
+	}
+}
+
