@@ -46,11 +46,11 @@ type ClientOptions struct {
 func NewClient(opts ClientOptions) *Client {
 	baseURL := opts.BaseURL
 	if baseURL == "" {
-		baseURL = "https://api.opencode.ai/v1"
+		baseURL = "https://opencode.ai/zen/v1"
 	}
 	model := opts.Model
 	if model == "" {
-		model = "gpt-4o-mini"
+		model = "musespark-1.3"
 	}
 	httpClient := opts.HTTPClient
 	if httpClient == nil {

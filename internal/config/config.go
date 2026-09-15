@@ -28,7 +28,8 @@ type Config struct {
 	OpenCodeAPIKey    string   `yaml:"opencode_api_key"`
 	OpenCodeBaseURL   string   `yaml:"opencode_base_url"`
 	OpenAIAPIKey      string   `yaml:"openai_api_key"`
-	AIMode            string   `yaml:"ai_mode"` // "triage" | "none"
+	AIModel           string   `yaml:"ai_model"` // e.g. "musespark-1.3" or "gpt-4o-mini"
+	AIMode            string   `yaml:"ai_mode"`  // "triage" | "none"
 	DatabasePath      string   `yaml:"database_path"`
 	LogLevel          string   `yaml:"log_level"`
 }
@@ -45,10 +46,44 @@ func DefaultConfig() *Config {
 		CaptchaBridgePort: 8765,
 		AutoOpenBrowser:   true,
 		Onboarding:        "manual",
-		OpenCodeBaseURL:   "https://api.opencode.ai/v1",
+		OpenCodeBaseURL:   "https://opencode.ai/zen/v1",
+		AIModel:           "",
 		AIMode:            "triage",
 		DatabasePath:      "run.sqlite",
 		LogLevel:          "info",
+	}
+}
+
+// ApplyEnv populates configuration fields directly from environment variables.
+func ApplyEnv(c *Config) {
+	if v := os.Getenv("DISCORD_TOKEN"); v != "" && c.DiscordToken == "" {
+		c.DiscordToken = v
+	}
+	if v := os.Getenv("PROXY"); v != "" && c.Proxy == "" {
+		c.Proxy = v
+	}
+	if v := os.Getenv("OPENCODE_API_KEY"); v != "" {
+		c.OpenCodeAPIKey = v
+	}
+	if v := os.Getenv("OPENCODE_BASE_URL"); v != "" {
+		c.OpenCodeBaseURL = v
+	}
+	if v := os.Getenv("OPENAI_API_KEY"); v != "" {
+		c.OpenAIAPIKey = v
+	}
+	if v := os.Getenv("AI_MODEL"); v != "" {
+		c.AIModel = v
+	} else if v := os.Getenv("OPENCODE_MODEL"); v != "" {
+		c.AIModel = v
+	}
+	if v := os.Getenv("DISBOARD_COOKIES"); v != "" && c.DisboardCookies == "" {
+		c.DisboardCookies = v
+	}
+	if v := os.Getenv("DATABASE_PATH"); v != "" && c.DatabasePath == "run.sqlite" {
+		c.DatabasePath = v
+	}
+	if v := os.Getenv("BROWSER_EXEC"); v != "" && c.BrowserExec == "" {
+		c.BrowserExec = v
 	}
 }
 
@@ -75,22 +110,23 @@ func expandEnv(s string) string {
 func Load(path string) (*Config, error) {
 	cfg := DefaultConfig()
 
-	if path == "" {
-		return cfg, nil
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("config file not found: %s", path)
+	if path != "" {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, fmt.Errorf("config file not found: %s", path)
+			}
+			return nil, fmt.Errorf("failed to read config file: %w", err)
 		}
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+
+		expanded := expandEnv(string(data))
+		if err := yaml.Unmarshal([]byte(expanded), cfg); err != nil {
+			return nil, fmt.Errorf("failed to parse yaml config: %w", err)
+		}
 	}
 
-	expanded := expandEnv(string(data))
-	if err := yaml.Unmarshal([]byte(expanded), cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse yaml config: %w", err)
-	}
+	// Environment variable overrides
+	ApplyEnv(cfg)
 
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)

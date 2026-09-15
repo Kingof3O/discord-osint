@@ -116,3 +116,29 @@ func TestValidationErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyEnvDirect(t *testing.T) {
+	t.Setenv("DISCORD_TOKEN", "direct-env-token")
+	t.Setenv("AI_MODEL", "musespark-1.3")
+	t.Setenv("OPENCODE_BASE_URL", "https://opencode.ai/zen/v1")
+	t.Setenv("OPENCODE_API_KEY", "zen-key-999")
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load(\"\") failed: %v", err)
+	}
+
+	if cfg.DiscordToken != "direct-env-token" {
+		t.Errorf("expected direct-env-token, got %q", cfg.DiscordToken)
+	}
+	if cfg.AIModel != "musespark-1.3" {
+		t.Errorf("expected musespark-1.3, got %q", cfg.AIModel)
+	}
+	if cfg.OpenCodeBaseURL != "https://opencode.ai/zen/v1" {
+		t.Errorf("expected https://opencode.ai/zen/v1, got %q", cfg.OpenCodeBaseURL)
+	}
+	if cfg.OpenCodeAPIKey != "zen-key-999" {
+		t.Errorf("expected zen-key-999, got %q", cfg.OpenCodeAPIKey)
+	}
+}
+
