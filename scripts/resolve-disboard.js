@@ -149,8 +149,19 @@ async function main() {
     let serverId = directId;
     let displayName = item;
 
-    // If item is not a direct server ID or URL, search Disboard by server name
+    // If item is not a direct server ID or URL, first check Discord's vanity directory
     if (!serverId) {
+      const vanity = await tryVanityOrSlug(item);
+      if (vanity) {
+        console.log(`    [✓] Discovered direct Discord vanity invite: https://discord.gg/${vanity.code} ("${vanity.name}", ${vanity.members || 0} members)`);
+        const cleanInvite = `https://discord.gg/${vanity.code}`;
+        if (!resolvedInvites.has(cleanInvite)) {
+          resolvedInvites.add(cleanInvite);
+          fs.appendFileSync(outputFile, `# ${vanity.name} (${vanity.id || 'vanity'})\n${cleanInvite}\n`);
+        }
+        continue;
+      }
+
       console.log(`[${i + 1}/${rawTargets.length}] Searching Disboard for server: "${item}"...`);
       const searchUrl = `https://disboard.org/search?keyword=${encodeURIComponent(item)}&nsfw=1`;
       try {
@@ -300,6 +311,38 @@ async function waitForCloudflare(page) {
     await page.waitForTimeout(1000);
   }
   return false;
+}
+
+async function tryVanityOrSlug(name) {
+  const clean = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const kebab = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const candidates = [clean, kebab];
+  if (name.toLowerCase().startsWith('the ')) {
+    const withoutThe = name.slice(4).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    candidates.push(withoutThe);
+  }
+  // Also handle known abbreviations/common patterns
+  if (name.toLowerCase().includes('&')) {
+    candidates.push(name.toLowerCase().replace('&', 'n').replace(/[^a-z0-9]/g, ''));
+    candidates.push(name.toLowerCase().replace(/the /g, '').replace('&', 'n').replace(/[^a-z0-9]/g, ''));
+  }
+
+  for (const slug of Array.from(new Set(candidates))) {
+    if (!slug) continue;
+    try {
+      const res = await fetch(`https://discord.com/api/v9/invites/${slug}?with_counts=true`);
+      if (res.status === 200) {
+        const data = await res.json();
+        return {
+          code: slug,
+          name: data.guild?.name || name,
+          id: data.guild?.id,
+          members: data.approximate_member_count
+        };
+      }
+    } catch {}
+  }
+  return null;
 }
 
 function extractServerId(input) {
