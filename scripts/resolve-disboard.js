@@ -4,18 +4,17 @@
  * Disboard -> discord.gg Automated Resolver
  *
  * Uses genuine Chrome via Playwright with persistent storage to bypass Cloudflare
- * TLS fingerprinting, handle NSFW/age gates, and capture clean discord.gg/xxxx invites.
+ * TLS fingerprinting, search server names, handle NSFW/age gates, and capture clean discord.gg/xxxx invites.
  *
  * Usage:
- *   # 1. Resolve specific Disboard server ID(s) or URLs:
- *   node scripts/resolve-disboard.js 1164734637927571477
- *   node scripts/resolve-disboard.js https://disboard.org/server/1164734637927571477
+ *   # 1. Search servers by exact name(s):
+ *   node scripts/resolve-disboard.js "The playhouse" "Cornhub" "Sinnery" "The fucc & chat"
  *
- *   # 2. Search Disboard by keyword/tag and auto-resolve top N servers:
+ *   # 2. Or pass a file with server names / URLs / IDs (one per line):
+ *   node scripts/resolve-disboard.js -f servers.txt -o invites.txt
+ *
+ *   # 3. Search Disboard by general keyword/tag:
  *   node scripts/resolve-disboard.js --search "crypto" --limit 10
- *
- *   # 3. Read a list of Disboard server URLs/IDs from file:
- *   node scripts/resolve-disboard.js -f disboard_servers.txt -o invites.txt
  */
 
 const fs = require('fs');
@@ -27,13 +26,13 @@ async function main() {
   let outputFile = 'invites.txt';
   let profileDir = path.join(__dirname, '..', '.chrome-disboard-profile');
   let headless = false;
-  let searchQuery = null;
+  let generalSearchQuery = null;
   let searchLimit = 15;
-  let targets = [];
+  let rawTargets = [];
 
   // Parse CLI args
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '-f' || args[i] === '--file' || args[i] === '--input') {
+    if (args[i] === '-f' || args[i] === '--file' || args[i] === '--input' || args[i] === '--names-file') {
       inputFile = args[++i];
     } else if (args[i] === '-o' || args[i] === '--output') {
       outputFile = args[++i];
@@ -42,14 +41,26 @@ async function main() {
     } else if (args[i] === '--profile') {
       profileDir = args[++i];
     } else if (args[i] === '-s' || args[i] === '--search' || args[i] === '--tag') {
-      searchQuery = args[++i];
+      generalSearchQuery = args[++i];
     } else if (args[i] === '-l' || args[i] === '--limit') {
       searchLimit = parseInt(args[++i], 10) || 15;
+    } else if (args[i] === '--names') {
+      // Collect remaining non-flag arguments or comma-separated list
+      i++;
+      while (i < args.length && !args[i].startsWith('-')) {
+        if (args[i].includes(',')) {
+          rawTargets.push(...args[i].split(',').map(s => s.trim()).filter(Boolean));
+        } else {
+          rawTargets.push(args[i].trim());
+        }
+        i++;
+      }
+      i--; // adjust loop step
     } else if (args[i] === '-h' || args[i] === '--help') {
       printHelp();
       process.exit(0);
     } else if (!args[i].startsWith('-')) {
-      targets.push(args[i]);
+      rawTargets.push(args[i]);
     }
   }
 
@@ -63,13 +74,13 @@ async function main() {
     for (let line of lines) {
       line = line.trim();
       if (line && !line.startsWith('#')) {
-        targets.push(line);
+        rawTargets.push(line);
       }
     }
   }
 
-  if (targets.length === 0 && !searchQuery) {
-    console.error('[-] No Disboard targets or search query provided.');
+  if (rawTargets.length === 0 && !generalSearchQuery) {
+    console.error('[-] No server names, Disboard IDs, or search queries provided.');
     printHelp();
     process.exit(1);
   }
@@ -81,15 +92,15 @@ async function main() {
     try {
       playwright = await import('playwright');
     } catch {
-      console.error('[-] Playwright is not installed. Please run: npm install -D playwright');
+      console.error('[-] Playwright is not installed. Run: npm install -D playwright');
       process.exit(1);
     }
   }
 
   console.log(`======================================================================`);
-  console.log(`[*] Disboard -> discord.gg Browser Resolver`);
-  console.log(`[*] Profile: ${profileDir}`);
-  console.log(`[*] Output : ${outputFile}`);
+  console.log(`[*] Disboard -> discord.gg Automated Browser Resolver`);
+  console.log(`[*] Chrome Profile : ${profileDir}`);
+  console.log(`[*] Output File    : ${outputFile}`);
   console.log(`======================================================================\n`);
 
   // Launch persistent context with installed Google Chrome
@@ -106,14 +117,13 @@ async function main() {
   const page = browserContext.pages()[0] || await browserContext.newPage();
   const resolvedInvites = new Set();
 
-  // If a search query is provided, query Disboard first to discover server IDs
-  if (searchQuery) {
-    console.log(`[*] Searching Disboard for query: "${searchQuery}" (limit: ${searchLimit})...`);
-    const searchUrl = `https://disboard.org/search?keyword=${encodeURIComponent(searchQuery)}`;
+  // If a general category/tag search query was provided
+  if (generalSearchQuery) {
+    console.log(`[*] Searching Disboard for tag/query: "${generalSearchQuery}" (limit: ${searchLimit})...`);
+    const searchUrl = `https://disboard.org/search?keyword=${encodeURIComponent(generalSearchQuery)}`;
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await waitForCloudflare(page);
 
-    // Extract all server join links from search results
     const foundIds = await page.evaluate(() => {
       const ids = [];
       const links = document.querySelectorAll('a[href*="/server/join/"], a[href*="/server/"]');
@@ -127,26 +137,90 @@ async function main() {
       return ids;
     });
 
-    console.log(`[+] Disboard search returned ${foundIds.length} candidate servers.`);
+    console.log(`[+] Disboard returned ${foundIds.length} candidate servers.`);
     for (const id of foundIds.slice(0, searchLimit)) {
-      if (!targets.includes(id)) {
-        targets.push(id);
+      if (!rawTargets.includes(id)) {
+        rawTargets.push(id);
       }
     }
   }
 
-  console.log(`[*] Resolving ${targets.length} target server(s)...\n`);
+  console.log(`[*] Processing ${rawTargets.length} target(s)...\n`);
 
-  for (let i = 0; i < targets.length; i++) {
-    const raw = targets[i].trim();
-    const serverId = extractServerId(raw);
+  for (let i = 0; i < rawTargets.length; i++) {
+    const item = rawTargets[i].trim();
+    if (!item) continue;
+
+    const directId = extractServerId(item);
+
+    let serverId = directId;
+    let displayName = item;
+
+    // If item is not a direct server ID or URL, search Disboard by this server name!
     if (!serverId) {
-      console.warn(`[!] Skipping invalid Disboard target: ${raw}`);
-      continue;
+      console.log(`[${i + 1}/${rawTargets.length}] Searching Disboard for server name: "${item}"...`);
+      const searchUrl = `https://disboard.org/search?keyword=${encodeURIComponent(item)}`;
+      try {
+        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await waitForCloudflare(page);
+
+        // Find best matching server result
+        const match = await page.evaluate((targetName) => {
+          const lowerTarget = targetName.toLowerCase();
+          const cards = document.querySelectorAll('.server-card, .listing, .server-item, .column');
+          let best = null;
+
+          for (const card of cards) {
+            const joinLink = card.querySelector('a[href*="/server/join/"], a[href*="/server/"]');
+            if (!joinLink) continue;
+            const href = joinLink.getAttribute('href') || '';
+            const m = href.match(/\/server\/(?:join\/)?(\d{17,20})/);
+            if (!m) continue;
+
+            const titleElem = card.querySelector('.server-name, .server-title, .listing-title, h2, h3, a');
+            const title = titleElem ? titleElem.innerText.trim() : '';
+
+            // Exact or substring match priority
+            if (title.toLowerCase() === lowerTarget) {
+              return { id: m[1], name: title, exact: true };
+            }
+            if (!best) {
+              best = { id: m[1], name: title, exact: false };
+            }
+          }
+
+          // Fallback if cards not found: scan all join links
+          if (!best) {
+            const allJoinLinks = document.querySelectorAll('a[href*="/server/join/"]');
+            for (const a of allJoinLinks) {
+              const href = a.getAttribute('href') || '';
+              const m = href.match(/\/server\/join\/(\d{17,20})/);
+              if (m) {
+                return { id: m[1], name: a.innerText.trim() || targetName, exact: false };
+              }
+            }
+          }
+
+          return best;
+        }, item);
+
+        if (match && match.id) {
+          serverId = match.id;
+          displayName = match.name || item;
+          console.log(`    [+] Found server: "${displayName}" (ID: ${serverId})`);
+        } else {
+          console.warn(`    [!] No Disboard results found for: "${item}".`);
+          continue;
+        }
+      } catch (err) {
+        console.error(`    [-] Error searching for "${item}": ${err.message}`);
+        continue;
+      }
     }
 
+    // Resolve the invite link for serverId
     const joinUrl = `https://disboard.org/server/join/${serverId}`;
-    console.log(`[${i + 1}/${targets.length}] Resolving server ${serverId} (${joinUrl})...`);
+    console.log(`    [*] Joining server flow: ${joinUrl}`);
 
     let capturedInvite = null;
 
@@ -164,23 +238,21 @@ async function main() {
     try {
       await page.goto(joinUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
       checkUrl(page.url());
-
-      // Wait if Cloudflare Turnstile interstitial appears
       await waitForCloudflare(page);
       checkUrl(page.url());
 
       if (!capturedInvite) {
-        // Check for 18+ age verification button
+        // Check for 18+ confirmation
         const confirm18Btn = page.locator('button:has-text("18+"), a:has-text("18+"), text="Yes, I am 18+", text="Yes, I\'m 18+"').first();
         if (await confirm18Btn.isVisible({ timeout: 2000 }).catch(() => false)) {
-          console.log('    [+] Clicking 18+ age confirmation...');
+          console.log('    [+] Clicking 18+ age verification...');
           await confirm18Btn.click().catch(() => {});
         }
 
-        // Check for Disboard join button
+        // Check for join button
         const joinBtn = page.locator('.server-join, a:has-text("Join this server"), button:has-text("Join this server")').first();
         if (await joinBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-          console.log('    [+] Clicking "Join this server" button...');
+          console.log('    [+] Clicking "Join this server"...');
           await joinBtn.click().catch(() => {});
         }
 
@@ -194,16 +266,17 @@ async function main() {
 
       if (capturedInvite) {
         const cleanInvite = cleanDiscordInvite(capturedInvite);
-        console.log(`    [✓] Extracted: ${cleanInvite}`);
+        console.log(`    [✓] Captured invite for "${displayName}": ${cleanInvite}\n`);
         if (!resolvedInvites.has(cleanInvite)) {
           resolvedInvites.add(cleanInvite);
-          fs.appendFileSync(outputFile, cleanInvite + '\n');
+          // Write to output file with a comment header indicating which server it belongs to
+          fs.appendFileSync(outputFile, `# ${displayName} (${serverId})\n${cleanInvite}\n`);
         }
       } else {
-        console.warn(`    [!] Could not extract invite for server ${serverId}.`);
+        console.warn(`    [!] Could not capture invite for "${displayName}" (ID: ${serverId}).\n`);
       }
     } catch (err) {
-      console.error(`    [-] Error resolving ${joinUrl}: ${err.message}`);
+      console.error(`    [-] Error resolving ${joinUrl}: ${err.message}\n`);
     } finally {
       page.off('request', onRequest);
     }
@@ -213,10 +286,10 @@ async function main() {
 
   await browserContext.close();
 
-  console.log(`\n======================================================================`);
+  console.log(`======================================================================`);
   console.log(`[✓] Successfully resolved ${resolvedInvites.size} Discord invite(s) to: ${outputFile}`);
   console.log(`======================================================================`);
-  console.log(`You can now run your investigation with zero manual steps:`);
+  console.log(`Now run your automated Discord OSINT scan:`);
   console.log(`  ./bin/discord-osint search --invites-file ${outputFile} --username <TARGET>\n`);
 }
 
@@ -232,7 +305,7 @@ async function waitForCloudflare(page) {
       return true;
     }
     if (attempt === 0) {
-      console.log('    [!] Cloudflare Turnstile detected. If prompted, complete the verification in Chrome...');
+      console.log('    [!] Cloudflare challenge detected. If prompted, complete the verification in Chrome...');
     }
     await page.waitForTimeout(1000);
   }
@@ -265,21 +338,20 @@ function printHelp() {
 Disboard -> discord.gg Automated Resolver
 
 Usage:
-  node scripts/resolve-disboard.js [options] [server_id_or_url...]
+  # Search by server name(s):
+  node scripts/resolve-disboard.js "The playhouse" "Cornhub" "Sinnery" "The fucc & chat"
+
+  # Or read server names from a text file:
+  node scripts/resolve-disboard.js -f servers.txt -o invites.txt
 
 Options:
-  -s, --search <query>  Search Disboard for a keyword or tag to automatically gather server IDs
-  -l, --limit <n>       Maximum servers to resolve from search (default: 15)
-  -f, --file <path>     Read Disboard server IDs or URLs from file
+  -f, --file <path>     Read server names, IDs, or URLs from file (one per line)
   -o, --output <path>   Write resolved discord.gg URLs to file (default: invites.txt)
+  -s, --search <query>  Search Disboard for a general tag or keyword (e.g. crypto)
+  -l, --limit <n>       Limit results from general tag search (default: 15)
   --headless            Run browser in headless mode (default: false)
   --profile <path>      Path to persistent Chrome profile directory
   -h, --help            Show this help message
-
-Examples:
-  node scripts/resolve-disboard.js 1164734637927571477
-  node scripts/resolve-disboard.js --search "crypto" --limit 10 -o crypto_invites.txt
-  node scripts/resolve-disboard.js -f targets.txt -o invites.txt
 `);
 }
 
