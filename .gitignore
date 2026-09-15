@@ -7,3 +7,5 @@ dist/
 *.sqlite
 *.sqlite-journal
 *.log
+exports_*
+**/exports_*
