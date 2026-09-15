@@ -1,0 +1,29 @@
+[
+  {
+    "run_id": "run_1789491930",
+    "guild_id": "",
+    "guild_name": "Direct Server (invite-alpha)",
+    "invite_code": "invite-alpha",
+    "scan_status": "complete",
+    "best_match_status": "not_found",
+    "best_match_reason": "",
+    "best_observed_user_id": "",
+    "best_observed_username": "",
+    "member_coverage": "complete",
+    "members_examined": 0,
+    "member_stop_reason": "",
+    "message_coverage": "partial",
+    "messages_examined": 0,
+    "oldest_checked_at": "",
+    "newest_checked_at": "",
+    "channels_discovered": 0,
+    "channels_scanned": 0,
+    "channels_unreadable": 0,
+    "message_stop_reason": "",
+    "onboarding_status": "",
+    "gate_type": "",
+    "gate_status": "",
+    "started_at": "2026-09-15T17:05:30Z",
+    "completed_at": "2026-09-15T17:05:30Z"
+  }
+]
