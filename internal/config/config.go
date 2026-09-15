@@ -3,7 +3,9 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -106,8 +108,49 @@ func expandEnv(s string) string {
 	})
 }
 
+// LoadDotEnv loads key-value pairs from .env files without overwriting existing process environment variables.
+func LoadDotEnv(paths ...string) {
+	for _, p := range paths {
+		if p == "" {
+			continue
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			if (strings.HasPrefix(val, "\"") && strings.HasSuffix(val, "\"")) ||
+				(strings.HasPrefix(val, "'") && strings.HasSuffix(val, "'")) {
+				if len(val) >= 2 {
+					val = val[1 : len(val)-1]
+				}
+			}
+			if os.Getenv(key) == "" {
+				_ = os.Setenv(key, val)
+			}
+		}
+	}
+}
+
 // Load loads and parses the YAML config from path, expanding environment variables.
+// It automatically attempts to load .env from the working directory and config path.
 func Load(path string) (*Config, error) {
+	candidates := []string{".env"}
+	if path != "" {
+		candidates = append(candidates, filepath.Join(filepath.Dir(path), ".env"))
+	}
+	LoadDotEnv(candidates...)
+
 	cfg := DefaultConfig()
 
 	if path != "" {

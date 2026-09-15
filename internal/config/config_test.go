@@ -142,3 +142,29 @@ func TestApplyEnvDirect(t *testing.T) {
 	}
 }
 
+func TestLoadDotEnv(t *testing.T) {
+	tmpDir := t.TempDir()
+	envPath := filepath.Join(tmpDir, ".env")
+	envContent := `# Comment line
+TEST_DOTENV_KEY=super-secret-123
+TEST_DOTENV_QUOTED="quoted-value"
+TEST_DOTENV_MODEL='muse-spark-1.3-contributor-free'
+`
+	if err := os.WriteFile(envPath, []byte(envContent), 0600); err != nil {
+		t.Fatalf("failed to write test .env: %v", err)
+	}
+
+	LoadDotEnv(envPath)
+
+	if os.Getenv("TEST_DOTENV_KEY") != "super-secret-123" {
+		t.Errorf("expected super-secret-123, got %q", os.Getenv("TEST_DOTENV_KEY"))
+	}
+	if os.Getenv("TEST_DOTENV_QUOTED") != "quoted-value" {
+		t.Errorf("expected quoted-value, got %q", os.Getenv("TEST_DOTENV_QUOTED"))
+	}
+	if os.Getenv("TEST_DOTENV_MODEL") != "muse-spark-1.3-contributor-free" {
+		t.Errorf("expected muse-spark-1.3-contributor-free, got %q", os.Getenv("TEST_DOTENV_MODEL"))
+	}
+}
+
+

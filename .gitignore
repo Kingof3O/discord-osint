@@ -9,3 +9,4 @@ dist/
 *.log
 exports_*
 **/exports_*
+.env
