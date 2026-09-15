@@ -116,4 +116,10 @@ func TestExportArtifacts(t *testing.T) {
 	if err != nil || !strings.Contains(string(reportBytes), "Confirmed Target Presence") {
 		t.Errorf("invalid report.md content: %s", string(reportBytes))
 	}
+
+	// Verify report.html
+	htmlBytes, err := os.ReadFile(filepath.Join(outDir, "report.html"))
+	if err != nil || !strings.Contains(string(htmlBytes), "Discord OSINT Report") || !strings.Contains(string(htmlBytes), "badge-confirmed") {
+		t.Errorf("invalid report.html content: %s", string(htmlBytes))
+	}
 }

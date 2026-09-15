@@ -110,5 +110,12 @@ func ExportArtifacts(ctx context.Context, s *store.Store, runID string, opts Exp
 		return fmt.Errorf("failed to write report.md: %w", err)
 	}
 
+	// 5. Export report.html (offline standalone HTML report)
+	htmlPath := filepath.Join(outDir, "report.html")
+	reportHTML := GenerateHTMLReport(run, scans, obs, msgs)
+	if err := os.WriteFile(htmlPath, []byte(reportHTML), 0644); err != nil {
+		return fmt.Errorf("failed to write report.html: %w", err)
+	}
+
 	return nil
 }

@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Discord OSINT Dashboard</title>
+<style>
+:root {
+  --bg-darkest: #111214;
+  --bg-sidebar: #1e1f22;
+  --bg-main: #2b2d31;
+  --bg-card: #313338;
+  --bg-card-hover: #383a40;
+  --accent: #5865f2;
+  --accent-hover: #4752c4;
+  --text-normal: #dbdee1;
+  --text-muted: #949ba4;
+  --text-header: #ffffff;
+  --status-green: #23a55a;
+  --status-yellow: #f0b232;
+  --status-red: #f23f43;
+  --status-gray: #80848e;
+  --border: #3f4147;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-darkest);
+  color: var(--text-normal);
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 320px;
+  background-color: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+.sidebar-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brand-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background-color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+}
+.brand-title { font-size: 16px; font-weight: bold; color: var(--text-header); }
+.brand-sub { font-size: 12px; color: var(--text-muted); }
+.sidebar-controls {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+.run-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+.run-card {
+  background-color: var(--bg-card);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.run-card:hover {
+  background-color: var(--bg-card-hover);
+  border-color: var(--border);
+}
+.run-card.active {
+  border-color: var(--accent);
+  background-color: rgba(88, 101, 242, 0.1);
+}
+.run-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-header);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.run-card-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+/* Main Content */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-main);
+  overflow-y: auto;
+}
+.topbar {
+  background-color: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.target-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.target-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background-color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: bold;
+  color: #fff;
+  overflow: hidden;
+}
+.target-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.target-name { font-size: 18px; font-weight: bold; color: var(--text-header); }
+.target-sub { font-size: 13px; color: var(--text-muted); }
+
+.content-area {
+  padding: 24px;
+  flex: 1;
+}
+
+/* KPI Cards */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.kpi-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+}
+.kpi-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
+.kpi-num { font-size: 28px; font-weight: bold; color: var(--text-header); margin-top: 6px; }
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+.tab-btn {
+  background: none;
+  border: none;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+.tab-btn.active {
+  color: var(--text-header);
+  border-bottom-color: var(--accent);
+}
+.tab-btn:hover { color: var(--text-header); }
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.badge-confirmed { background-color: rgba(35, 165, 90, 0.2); color: var(--status-green); border: 1px solid var(--status-green); }
+.badge-candidate { background-color: rgba(240, 178, 50, 0.2); color: var(--status-yellow); border: 1px solid var(--status-yellow); }
+.badge-notfound { background-color: rgba(128, 132, 142, 0.2); color: var(--status-gray); border: 1px solid var(--status-gray); }
+.badge-blocked { background-color: rgba(242, 63, 67, 0.2); color: var(--status-red); border: 1px solid var(--status-red); }
+.badge-complete { background-color: rgba(35, 165, 90, 0.2); color: var(--status-green); }
+.badge-running { background-color: rgba(88, 101, 242, 0.2); color: var(--accent); }
+
+/* Tables */
+.table-container {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+table { width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; }
+th, td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+th { background-color: rgba(0, 0, 0, 0.2); color: var(--text-muted); font-size: 12px; text-transform: uppercase; }
+tr:hover td { background-color: rgba(255, 255, 255, 0.02); }
+
+/* Buttons */
+.btn {
+  background-color: var(--accent);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background-color 0.15s ease;
+}
+.btn:hover { background-color: var(--accent-hover); }
+.btn-secondary {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-normal);
+}
+.btn-secondary:hover { background-color: var(--bg-card-hover); }
+
+/* Cards list */
+.card-item {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.code-box {
+  background-color: var(--bg-darkest);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px 16px;
+  color: var(--text-muted);
+}
+</style>
+</head>
+<body>
+
+<!-- Left Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <div class="brand-icon">DO</div>
+    <div>
+      <div class="brand-title">Discord OSINT</div>
+      <div class="brand-sub">Investigation Dashboard</div>
+    </div>
+  </div>
+  <div class="sidebar-controls">
+    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+      <input type="checkbox" id="autoRefreshToggle" checked> Auto-refresh (3s)
+    </label>
+    <button class="btn btn-secondary" onclick="fetchRuns()" style="padding: 4px 8px; font-size: 12px;">Refresh</button>
+  </div>
+  <div class="run-list" id="runList">
+    <div class="empty-state">Loading runs...</div>
+  </div>
+</aside>
+
+<!-- Main Investigation Area -->
+<main class="main" id="mainView">
+  <div class="topbar">
+    <div class="target-summary">
+      <div class="target-avatar" id="targetAvatar">?</div>
+      <div>
+        <div class="target-name" id="targetName">Select a search run</div>
+        <div class="target-sub" id="targetDetails">Target User ID &bull; Tag &bull; Run Date</div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 10px;">
+      <a href="#" id="viewReportBtn" target="_blank" class="btn btn-secondary" style="display: none;">
+        <span>📄</span> View Report.html
+      </a>
+    </div>
+  </div>
+
+  <div class="content-area" id="contentArea" style="display: none;">
+    <!-- KPI Row -->
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-title">Servers Examined</div>
+        <div class="kpi-num" id="kpiServers">0</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Confirmed Matches</div>
+        <div class="kpi-num" id="kpiConfirmed" style="color: var(--status-green);">0</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Candidate Matches</div>
+        <div class="kpi-num" id="kpiCandidates" style="color: var(--status-yellow);">0</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Absence Verified</div>
+        <div class="kpi-num" id="kpiNotFound">0</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Gated / Blocked</div>
+        <div class="kpi-num" id="kpiBlocked" style="color: var(--status-red);">0</div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('servers')">Scanned Servers (<span id="countServersTab">0</span>)</button>
+      <button class="tab-btn" onclick="switchTab('matches')">Identity Matches (<span id="countMatchesTab">0</span>)</button>
+      <button class="tab-btn" onclick="switchTab('messages')">Evidence Messages (<span id="countMessagesTab">0</span>)</button>
+    </div>
+
+    <!-- Tab 1: Servers -->
+    <div id="tabServers" class="tab-content">
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Server Name</th>
+              <th>Invite</th>
+              <th>Scan Status</th>
+              <th>Match Status</th>
+              <th>Reason</th>
+              <th>Member Coverage</th>
+            </tr>
+          </thead>
+          <tbody id="serversTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab 2: Identity Matches -->
+    <div id="tabMatches" class="tab-content" style="display: none;">
+      <div id="matchesContainer"></div>
+    </div>
+
+    <!-- Tab 3: Messages -->
+    <div id="tabMessages" class="tab-content" style="display: none;">
+      <div id="messagesContainer"></div>
+    </div>
+  </div>
+
+  <div id="noRunSelected" class="empty-state" style="margin: auto;">
+    <h2>Select an OSINT run from the sidebar to view findings</h2>
+    <p style="margin-top: 8px;">Real-time progress, server scans, and evidence will appear here.</p>
+  </div>
+</main>
+
+<script>
+let currentRunId = null;
+let runsData = [];
+let activeRunDetails = null;
+
+async function fetchRuns() {
+  try {
+    const res = await fetch('/api/runs');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    runsData = await res.json() || [];
+    renderRunList();
+    if (!currentRunId && runsData.length > 0) {
+      selectRun(runsData[0].run_id);
+    } else if (currentRunId) {
+      fetchRunDetails(currentRunId);
+    }
+  } catch (err) {
+    console.error('Failed to fetch runs:', err);
+  }
+}
+
+function renderRunList() {
+  const container = document.getElementById('runList');
+  if (runsData.length === 0) {
+    container.innerHTML = '<div class="empty-state">No OSINT runs found.</div>';
+    return;
+  }
+
+  container.innerHTML = runsData.map(r => {
+    const activeClass = r.run_id === currentRunId ? 'active' : '';
+    const badgeColor = r.status === 'complete' ? 'badge-complete' : (r.status === 'running' ? 'badge-running' : 'badge-blocked');
+    return `
+      <div class="run-card ${activeClass}" onclick="selectRun('${r.run_id}')">
+        <div class="run-card-title">
+          <span>${escapeHtml(r.target_username || r.run_id)}</span>
+          <span class="badge ${badgeColor}">${escapeHtml(r.status)}</span>
+        </div>
+        <div class="run-card-meta">
+          <span>Tag: ${escapeHtml(r.tag || 'none')}</span>
+          <span>${r.completed_servers}/${r.total_servers} servers</span>
+        </div>
+        <div class="run-card-meta" style="margin-top: 6px;">
+          <span style="color: var(--status-green);">Hits: ${r.confirmed_matches}</span>
+          <span style="color: var(--status-yellow);">Cand: ${r.candidate_matches}</span>
+          <span>${formatDate(r.created_at)}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function selectRun(runId) {
+  currentRunId = runId;
+  renderRunList();
+  await fetchRunDetails(runId);
+}
+
+async function fetchRunDetails(runId) {
+  try {
+    const res = await fetch(`/api/runs/${runId}`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    activeRunDetails = data;
+    renderRunDetails(data);
+  } catch (err) {
+    console.error('Failed to fetch run details:', err);
+  }
+}
+
+function renderRunDetails(data) {
+  const run = data.run || {};
+  const scans = data.scans || [];
+  const obs = data.observations || [];
+  const msgs = data.messages || [];
+
+  document.getElementById('noRunSelected').style.display = 'none';
+  document.getElementById('contentArea').style.display = 'block';
+
+  // Target header
+  document.getElementById('targetName').textContent = run.target_username || 'Target';
+  const targetSub = `User ID: ${run.target_user_id || 'N/A'} | Tag: ${run.tag} | Status: ${run.status} | Verified: ${formatDate(run.target_verified_at)}`;
+  document.getElementById('targetDetails').textContent = targetSub;
+
+  const avatarBox = document.getElementById('targetAvatar');
+  if (run.target_avatar_url) {
+    avatarBox.innerHTML = `<img src="${escapeHtml(run.target_avatar_url)}" alt="Avatar">`;
+  } else {
+    avatarBox.textContent = (run.target_username || 'U').charAt(0).toUpperCase();
+  }
+
+  // Report button
+  const reportBtn = document.getElementById('viewReportBtn');
+  reportBtn.href = `/api/runs/${run.run_id}/report.html`;
+  reportBtn.style.display = 'inline-flex';
+
+  // KPIs
+  let confirmed = 0, candidates = 0, notFound = 0, blocked = 0;
+  scans.forEach(s => {
+    if (s.best_match_status === 'confirmed') confirmed++;
+    else if (s.best_match_status === 'candidate') candidates++;
+    else if (s.best_match_status === 'not_found') notFound++;
+    if (s.scan_status === 'blocked') blocked++;
+  });
+
+  document.getElementById('kpiServers').textContent = scans.length;
+  document.getElementById('kpiConfirmed').textContent = confirmed;
+  document.getElementById('kpiCandidates').textContent = candidates;
+  document.getElementById('kpiNotFound').textContent = notFound;
+  document.getElementById('kpiBlocked').textContent = blocked;
+
+  // Tabs counts
+  document.getElementById('countServersTab').textContent = scans.length;
+  document.getElementById('countMatchesTab').textContent = obs.length;
+  document.getElementById('countMessagesTab').textContent = msgs.length;
+
+  // Render Servers table
+  const tbody = document.getElementById('serversTbody');
+  if (scans.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No server scans recorded.</td></tr>';
+  } else {
+    tbody.innerHTML = scans.map(s => {
+      let badgeClass = 'badge-notfound';
+      if (s.best_match_status === 'confirmed') badgeClass = 'badge-confirmed';
+      else if (s.best_match_status === 'candidate') badgeClass = 'badge-candidate';
+      if (s.scan_status === 'blocked') badgeClass = 'badge-blocked';
+
+      return `
+        <tr>
+          <td><strong>${escapeHtml(s.guild_name)}</strong></td>
+          <td><span class="code-box">${escapeHtml(s.invite_code)}</span></td>
+          <td>${escapeHtml(s.scan_status)}</td>
+          <td><span class="badge ${badgeClass}">${escapeHtml(s.best_match_status)}</span></td>
+          <td>${escapeHtml(s.best_match_reason || '-')}</td>
+          <td>${escapeHtml(s.member_coverage)}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // Render Matches
+  const matchesBox = document.getElementById('matchesContainer');
+  if (obs.length === 0) {
+    matchesBox.innerHTML = '<div class="empty-state">No identity matches observed.</div>';
+  } else {
+    matchesBox.innerHTML = obs.map(o => {
+      const badgeClass = o.match_status === 'confirmed' ? 'badge-confirmed' : 'badge-candidate';
+      const roles = (o.observed_roles || []).join(', ') || 'None';
+      return `
+        <div class="card-item">
+          <div class="card-header">
+            <div><strong>${escapeHtml(o.observed_username)}</strong> (Guild ID: <span class="code-box">${escapeHtml(o.guild_id)}</span>)</div>
+            <span class="badge ${badgeClass}">${escapeHtml(o.match_status)}</span>
+          </div>
+          <div class="run-card-meta">
+            <span>Observed User ID: <span class="code-box">${escapeHtml(o.observed_user_id)}</span></span>
+            <span>Nick: ${escapeHtml(o.observed_nick || '-')}</span>
+          </div>
+          <div class="run-card-meta" style="margin-top: 4px;">
+            <span>Joined: ${escapeHtml(o.observed_joined_at || '-')}</span>
+            <span>Roles: ${escapeHtml(roles)}</span>
+          </div>
+          <div class="run-card-meta" style="margin-top: 4px;">
+            <span>Reason: ${escapeHtml(o.match_reason)}</span>
+            <span>Method: ${escapeHtml(o.acquisition_method)}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // Render Messages
+  const msgsBox = document.getElementById('messagesContainer');
+  if (msgs.length === 0) {
+    msgsBox.innerHTML = '<div class="empty-state">No messages captured.</div>';
+  } else {
+    msgsBox.innerHTML = msgs.map(m => `
+      <div class="card-item" style="border-left: 4px solid var(--accent);">
+        <div class="card-header">
+          <div><strong>${escapeHtml(m.author_username)}</strong> (Author ID: <span class="code-box">${escapeHtml(m.author_id)}</span>)</div>
+          <span style="font-size: 12px; color: var(--text-muted);">${formatDate(m.timestamp)}</span>
+        </div>
+        <div style="font-size: 14px; margin-top: 6px; white-space: pre-wrap;">${escapeHtml(m.content)}</div>
+        <div class="run-card-meta" style="margin-top: 6px;">
+          <span>Channel: <span class="code-box">${escapeHtml(m.channel_id)}</span></span>
+          <span>Method: ${escapeHtml(m.acquisition_method)}</span>
+        </div>
+      </div>
+    `).join('');
+  }
+}
+
+function switchTab(tabName) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+
+  if (tabName === 'servers') {
+    event.target.classList.add('active');
+    document.getElementById('tabServers').style.display = 'block';
+  } else if (tabName === 'matches') {
+    event.target.classList.add('active');
+    document.getElementById('tabMatches').style.display = 'block';
+  } else if (tabName === 'messages') {
+    event.target.classList.add('active');
+    document.getElementById('tabMessages').style.display = 'block';
+  }
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? dateStr : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Initial load
+fetchRuns();
+
+// Auto refresh interval (3 seconds)
+setInterval(() => {
+  if (document.getElementById('autoRefreshToggle').checked) {
+    fetchRuns();
+  }
+}, 3000);
+</script>
+</body>
+</html>
