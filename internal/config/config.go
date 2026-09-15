@@ -21,6 +21,8 @@ type Config struct {
 	Captcha           string   `yaml:"captcha"`             // "manual" | "skip"
 	CaptchaTimeoutSec int      `yaml:"captcha_timeout_sec"` // seconds, default 300
 	CaptchaBridgePort int      `yaml:"captcha_bridge_port"` // default 8765
+	AutoOpenBrowser   bool     `yaml:"auto_open_browser"`   // default true
+	BrowserExec       string   `yaml:"browser_exec"`        // custom browser binary
 	Onboarding        string   `yaml:"onboarding"`          // "manual" | "assist" | "rules-only" | "skip"
 	DisboardCookies   string   `yaml:"disboard_cookies"`
 	OpenCodeAPIKey    string   `yaml:"opencode_api_key"`
@@ -41,6 +43,7 @@ func DefaultConfig() *Config {
 		Captcha:           "manual",
 		CaptchaTimeoutSec: 300,
 		CaptchaBridgePort: 8765,
+		AutoOpenBrowser:   true,
 		Onboarding:        "manual",
 		OpenCodeBaseURL:   "https://api.opencode.ai/v1",
 		AIMode:            "triage",

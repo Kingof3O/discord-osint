@@ -166,3 +166,45 @@ func TestHandleRulesScreening_ManualPrompt(t *testing.T) {
 		t.Errorf("manual reject failed: status=%s, submitted=%v, err=%v", statusNo, submitted, err)
 	}
 }
+
+func TestExecuteGate_ExternalLink_Confirm(t *testing.T) {
+	gate := GateClassification{
+		GateType:    GateLinkExternal,
+		ChannelID:   "chan_verify",
+		ChannelName: "verify",
+		TargetURL:   "https://altdentifier.com/verify?id=test",
+		Explanation: "External bot verification via altdentifier.com",
+	}
+
+	input := bytes.NewBufferString("y\n")
+	var out bytes.Buffer
+
+	status, err := ExecuteGate(context.Background(), gate, nil, "guild_123", "session_123", input, &out)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != GateStatusPassed {
+		t.Errorf("expected GateStatusPassed, got %s", status)
+	}
+}
+
+func TestExecuteGate_ExternalLink_Deny(t *testing.T) {
+	gate := GateClassification{
+		GateType:    GateLinkExternal,
+		ChannelID:   "chan_verify",
+		ChannelName: "verify",
+		TargetURL:   "https://wickbot.com/verify",
+		Explanation: "External bot verification via wickbot.com",
+	}
+
+	input := bytes.NewBufferString("n\n")
+	var out bytes.Buffer
+
+	status, err := ExecuteGate(context.Background(), gate, nil, "guild_123", "session_123", input, &out)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != GateStatusSkippedOperator {
+		t.Errorf("expected GateStatusSkippedOperator, got %s", status)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"discord-osint/internal/browser"
 	"discord-osint/internal/discord"
 )
 
@@ -15,7 +16,7 @@ var knownVerificationDomains = []string{
 	"altdentifier.com",
 	"captcha.site",
 	"wickbot.com",
-	"doublecounter.net",
+	"doublecounter",
 	"restorecord.com",
 	"vulcan.bot",
 }
@@ -67,12 +68,16 @@ func DetectChannelGates(channelID, channelName string, messages []discord.Discor
 		// 2. Detect External Verification Links
 		for _, domain := range knownVerificationDomains {
 			if strings.Contains(contentLower, domain) {
+				targetURL := browser.ExtractVerificationURL(msg.Content)
+				if targetURL == "" {
+					targetURL = "https://" + domain
+				}
 				gates = append(gates, GateClassification{
 					GateType:    GateLinkExternal,
 					ChannelID:   channelID,
 					ChannelName: channelName,
 					MessageID:   msg.ID,
-					TargetURL:   domain,
+					TargetURL:   targetURL,
 					Explanation: fmt.Sprintf("External bot verification via %s", domain),
 				})
 				break
@@ -189,18 +194,19 @@ func ExecuteGate(
 		return GateStatusPassed, nil
 
 	case GateLinkExternal:
-		fmt.Fprintln(writer, "")
-		fmt.Fprintf(writer, "[!] External Bot Verification in #%s: %s\n", gate.ChannelName, gate.Explanation)
-		fmt.Fprintf(writer, "Open link in burner browser to verify: %s\n", gate.TargetURL)
-		fmt.Fprintf(writer, "Verification completed in browser? [y/N]: ")
-		if !scanner.Scan() {
-			return GateStatusSkippedOperator, nil
+		bridge := browser.NewBridge(browser.Options{
+			AutoOpen: true,
+			Reader:   reader,
+			Writer:   writer,
+		})
+		ok, err := bridge.HandleVerification(ctx, gate.TargetURL, gate.Explanation)
+		if err != nil {
+			return GateStatusFailed, err
 		}
-		ans := strings.ToLower(strings.TrimSpace(scanner.Text()))
-		if ans != "y" && ans != "yes" {
-			return GateStatusSkippedOperator, nil
+		if ok {
+			return GateStatusPassed, nil
 		}
-		return GateStatusPassed, nil
+		return GateStatusSkippedOperator, nil
 
 	case GateNSFWConsent:
 		fmt.Fprintln(writer, "")
