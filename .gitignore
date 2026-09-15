@@ -10,3 +10,7 @@ dist/
 exports_*
 **/exports_*
 .env
+node_modules/
+.chrome-disboard-profile/
+invites.txt
+
