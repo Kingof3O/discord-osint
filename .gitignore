@@ -1,0 +1,9 @@
+.DS_Store
+._*
+*.swp
+*~
+bin/
+dist/
+*.sqlite
+*.sqlite-journal
+*.log
