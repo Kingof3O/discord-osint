@@ -209,6 +209,11 @@ func (e *Engine) Run(ctx context.Context, params SearchParams) (string, error) {
 		}
 	}
 
+	// 5.5 Mark run status complete
+	if err := e.store.UpdateRunStatus(ctx, runID, "complete"); err != nil {
+		e.logger.Warn("Failed to update run status to complete", zap.Error(err))
+	}
+
 	// 6. Export Artifacts
 	outOpts := export.ExportOptions{
 		OutputDir: fmt.Sprintf("exports_%s", runID),

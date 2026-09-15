@@ -253,3 +253,91 @@ func TestStore_ResumeQuery(t *testing.T) {
 		}
 	}
 }
+
+func TestStore_ListRunsAndLatestIncomplete(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// 1. Initial check - no runs
+	latest, err := s.GetLatestIncompleteRun(ctx)
+	if err != nil {
+		t.Fatalf("GetLatestIncompleteRun failed: %v", err)
+	}
+	if latest != nil {
+		t.Fatalf("expected nil latest run, got: %+v", latest)
+	}
+
+	// 2. Create Run 1 (completed)
+	tgt1 := target.ConfirmedTarget{
+		TargetInput:       "user1",
+		TargetUserID:      "1001",
+		TargetUsername:    "alice",
+		TargetDisplayName: "Alice",
+		TargetConfirmed:   true,
+		TargetVerifiedAt:  time.Now().UTC(),
+	}
+	if err := s.CreateRunAtomic(ctx, "run_001", "gaming", tgt1); err != nil {
+		t.Fatalf("CreateRunAtomic run_001: %v", err)
+	}
+	// Add a complete scan
+	s.RecordGuildScanTransaction(ctx, GuildScanRecord{
+		RunID: "run_001", GuildID: "g_1", ScanStatus: "complete", MemberCoverage: "complete", BestMatchStatus: "not_found", StartedAt: time.Now().UTC(),
+	}, nil, nil)
+	if err := s.UpdateRunStatus(ctx, "run_001", "complete"); err != nil {
+		t.Fatalf("UpdateRunStatus run_001: %v", err)
+	}
+
+	// 3. Create Run 2 (incomplete, has pending server and candidate match)
+	tgt2 := target.ConfirmedTarget{
+		TargetInput:       "user2",
+		TargetUserID:      "1002",
+		TargetUsername:    "bob",
+		TargetDisplayName: "Bob",
+		TargetConfirmed:   true,
+		TargetVerifiedAt:  time.Now().UTC(),
+	}
+	if err := s.CreateRunAtomic(ctx, "run_002", "crypto", tgt2); err != nil {
+		t.Fatalf("CreateRunAtomic run_002: %v", err)
+	}
+	s.RecordGuildScanTransaction(ctx, GuildScanRecord{
+		RunID: "run_002", GuildID: "g_2", ScanStatus: "pending", StartedAt: time.Now().UTC(),
+	}, nil, nil)
+	s.RecordGuildScanTransaction(ctx, GuildScanRecord{
+		RunID: "run_002", GuildID: "g_3", ScanStatus: "complete", MemberCoverage: "complete", BestMatchStatus: "candidate", StartedAt: time.Now().UTC(),
+	}, nil, nil)
+
+	// List runs
+	runs, err := s.ListRuns(ctx)
+	if err != nil {
+		t.Fatalf("ListRuns failed: %v", err)
+	}
+	if len(runs) != 2 {
+		t.Fatalf("expected 2 runs, got %d", len(runs))
+	}
+
+	// Newest first -> run_002 should be first
+	if runs[0].RunID != "run_002" {
+		t.Errorf("expected run_002 first, got %s", runs[0].RunID)
+	}
+	if runs[0].TotalServers != 2 || runs[0].PendingServers != 1 || runs[0].CandidateMatches != 1 {
+		t.Errorf("run_002 unexpected stats: %+v", runs[0])
+	}
+
+	// Run 1 check
+	if runs[1].RunID != "run_001" {
+		t.Errorf("expected run_001 second, got %s", runs[1].RunID)
+	}
+	if runs[1].Status != "complete" || runs[1].CompletedServers != 1 {
+		t.Errorf("run_001 unexpected stats: %+v", runs[1])
+	}
+
+	// Test GetLatestIncompleteRun
+	latest, err = s.GetLatestIncompleteRun(ctx)
+	if err != nil {
+		t.Fatalf("GetLatestIncompleteRun failed: %v", err)
+	}
+	if latest == nil || latest.RunID != "run_002" {
+		t.Fatalf("expected run_002 as latest incomplete run, got: %+v", latest)
+	}
+}
+

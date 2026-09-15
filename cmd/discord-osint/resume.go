@@ -22,10 +22,6 @@ var resumeCmd = &cobra.Command{
 	Long: `Resumes scanning non-terminal servers for a given run ID.
 Preserves the immutable target snapshot and all existing confirmed and candidate matches.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if resumeRunID == "" {
-			return fmt.Errorf("--run-id is required")
-		}
-
 		ctx := context.Background()
 
 		dbPath := cfg.DatabasePath
@@ -37,6 +33,19 @@ Preserves the immutable target snapshot and all existing confirmed and candidate
 			return fmt.Errorf("failed to open database: %w", err)
 		}
 		defer s.Close()
+
+		if resumeRunID == "" {
+			latest, err := s.GetLatestIncompleteRun(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to query incomplete runs: %w", err)
+			}
+			if latest == nil {
+				return fmt.Errorf("no --run-id specified and no incomplete runs found in database. Run 'discord-osint history' to view all runs")
+			}
+			fmt.Printf("[*] Auto-selected most recent incomplete run: %s\n    Target: %s | Tag: %s | Incomplete: %d servers\n\n",
+				latest.RunID, latest.TargetUsername, latest.Tag, latest.PendingServers)
+			resumeRunID = latest.RunID
+		}
 
 		run, err := s.GetRun(ctx, resumeRunID)
 		if err != nil {

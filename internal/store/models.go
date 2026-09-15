@@ -23,6 +23,22 @@ type RunRecord struct {
 	Status                  string    `json:"status"` // running | complete | error | aborted
 }
 
+// RunSummary aggregates progress, matches, and metadata for a run.
+type RunSummary struct {
+	RunID             string    `json:"run_id"`
+	TargetUsername    string    `json:"target_username"`
+	TargetUserID      string    `json:"target_user_id"`
+	TargetDisplayName string    `json:"target_display_name"`
+	Tag               string    `json:"tag"`
+	Status            string    `json:"status"`
+	CreatedAt         time.Time `json:"created_at"`
+	TotalServers      int       `json:"total_servers"`
+	CompletedServers  int       `json:"completed_servers"`
+	PendingServers    int       `json:"pending_servers"`
+	ConfirmedMatches  int       `json:"confirmed_matches"`
+	CandidateMatches  int       `json:"candidate_matches"`
+}
+
 // ServerRecord represents a discovered server/invite.
 type ServerRecord struct {
 	Tag                    string    `json:"tag"`

@@ -72,7 +72,7 @@ func (s *Store) migrate() error {
 
 // CreateRunAtomic creates a run row with the immutable confirmed target snapshot atomically.
 func (s *Store) CreateRunAtomic(ctx context.Context, runID string, tag string, t target.ConfirmedTarget) error {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
 	verifiedAt := t.TargetVerifiedAt.Format(time.RFC3339)
 
 	query := `
@@ -124,8 +124,72 @@ func (s *Store) GetRun(ctx context.Context, runID string) (*RunRecord, error) {
 
 	r.TargetConfirmed = confirmedInt == 1
 	r.TargetVerifiedAt, _ = time.Parse(time.RFC3339, verifiedAtStr)
-	r.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
+	r.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAtStr)
 	return &r, nil
+}
+
+// UpdateRunStatus updates the overall execution status of a run (running | complete | error | aborted).
+func (s *Store) UpdateRunStatus(ctx context.Context, runID, status string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE runs SET status = ? WHERE run_id = ?;`, status, runID)
+	if err != nil {
+		return fmt.Errorf("failed to update run status: %w", err)
+	}
+	return nil
+}
+
+// ListRuns returns all runs with aggregated scan statistics ordered from newest to oldest.
+func (s *Store) ListRuns(ctx context.Context) ([]RunSummary, error) {
+	query := `
+	SELECT 
+		r.run_id, r.target_username, r.target_user_id, r.target_display_name,
+		r.tag, r.status, r.created_at,
+		COUNT(g.id) AS total_servers,
+		COALESCE(SUM(CASE WHEN g.scan_status IN ('complete', 'blocked') THEN 1 ELSE 0 END), 0) AS completed_servers,
+		COALESCE(SUM(CASE WHEN g.scan_status IN ('pending', 'running', 'rate_limited', 'error') THEN 1 ELSE 0 END), 0) AS pending_servers,
+		COALESCE(SUM(CASE WHEN g.best_match_status = 'confirmed' THEN 1 ELSE 0 END), 0) AS confirmed_matches,
+		COALESCE(SUM(CASE WHEN g.best_match_status = 'candidate' THEN 1 ELSE 0 END), 0) AS candidate_matches
+	FROM runs r
+	LEFT JOIN guild_scans g ON r.run_id = g.run_id
+	GROUP BY r.run_id
+	ORDER BY r.created_at DESC, r.rowid DESC;
+	`
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query runs: %w", err)
+	}
+	defer rows.Close()
+
+	var summaries []RunSummary
+	for rows.Next() {
+		var sm RunSummary
+		var createdAtStr string
+		err := rows.Scan(
+			&sm.RunID, &sm.TargetUsername, &sm.TargetUserID, &sm.TargetDisplayName,
+			&sm.Tag, &sm.Status, &createdAtStr,
+			&sm.TotalServers, &sm.CompletedServers, &sm.PendingServers,
+			&sm.ConfirmedMatches, &sm.CandidateMatches,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan run summary: %w", err)
+		}
+		sm.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAtStr)
+		summaries = append(summaries, sm)
+	}
+	return summaries, nil
+}
+
+// GetLatestIncompleteRun retrieves the most recent run that has pending or non-terminal scans.
+func (s *Store) GetLatestIncompleteRun(ctx context.Context) (*RunSummary, error) {
+	runs, err := s.ListRuns(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range runs {
+		if r.Status != "complete" || r.PendingServers > 0 {
+			return &r, nil
+		}
+	}
+	return nil, nil
 }
 
 // SaveDiscoveredServers persists a batch of servers under a category tag idempotently.
