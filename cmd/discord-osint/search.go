@@ -24,6 +24,7 @@ var (
 	searchLimit       int
 	searchInvitesFile string
 	searchDirectCodes []string
+	searchServerNames []string
 	searchAutoConfirm bool
 	searchStay        bool
 )
@@ -101,6 +102,7 @@ and comprehensive audit provenance.`,
 			Limit:        searchLimit,
 			InvitesFile:  searchInvitesFile,
 			DirectCodes:  searchDirectCodes,
+			ServerNames:  searchServerNames,
 			AutoConfirm:  searchAutoConfirm,
 			StayAfterHit: searchStay,
 		}
@@ -124,6 +126,8 @@ func init() {
 	searchCmd.Flags().IntVarP(&searchLimit, "limit", "l", 30, "Maximum number of servers to walk")
 	searchCmd.Flags().StringVar(&searchInvitesFile, "invites-file", "", "Path to text file containing direct invite links/codes")
 	searchCmd.Flags().StringSliceVar(&searchDirectCodes, "invite", nil, "Direct invite code(s) or URL(s)")
+	searchCmd.Flags().StringSliceVar(&searchServerNames, "server-names", nil, "Specific Discord server name(s) to search on Disboard first (comma-separated or multiple flags)")
+	searchCmd.Flags().StringSliceVar(&searchServerNames, "server-name", nil, "Alias for --server-names")
 	searchCmd.Flags().BoolVarP(&searchAutoConfirm, "yes", "y", false, "Skip interactive preflight confirmation")
 	searchCmd.Flags().BoolVar(&searchStay, "stay", false, "Stay in guild after hit instead of leaving")
 

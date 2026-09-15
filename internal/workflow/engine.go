@@ -7,6 +7,7 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 
 	"discord-osint/internal/captcha"
@@ -23,13 +24,14 @@ import (
 
 // SearchParams contains runtime inputs for a search run.
 type SearchParams struct {
-	Tag         string
-	UserID      string
-	Username    string
-	Limit       int
-	InvitesFile string
-	DirectCodes []string
-	AutoConfirm bool
+	Tag          string
+	UserID       string
+	Username     string
+	Limit        int
+	InvitesFile  string
+	DirectCodes  []string
+	ServerNames  []string
+	AutoConfirm  bool
 	StayAfterHit bool
 }
 
@@ -123,29 +125,86 @@ func (e *Engine) Run(ctx context.Context, params SearchParams) (string, error) {
 
 	// 4. Server Discovery
 	var servers []disboard.DiscoveredServer
+	seenCodes := make(map[string]bool)
+
+	// 4.1 Prioritized Target Server Names via Disboard Search
+	if len(params.ServerNames) > 0 {
+		fmt.Fprintf(e.writer, "[*] Searching Disboard for %d prioritized target server name(s)...\n", len(params.ServerNames))
+		if e.disboard != nil {
+			for _, sName := range params.ServerNames {
+				sName = strings.TrimSpace(sName)
+				if sName == "" {
+					continue
+				}
+				fmt.Fprintf(e.writer, "    [*] Querying Disboard for target server: %q...\n", sName)
+				found, err := e.disboard.SearchByName(ctx, sName, 3)
+				if err != nil {
+					e.logger.Warn("Failed Disboard search for server name", zap.String("name", sName), zap.Error(err))
+					fmt.Fprintf(e.writer, "    [-] Disboard search failed for %q: %v\n", sName, err)
+					continue
+				}
+				if len(found) == 0 {
+					fmt.Fprintf(e.writer, "    [-] No Disboard servers found for name: %q\n", sName)
+					continue
+				}
+				for _, srv := range found {
+					if !seenCodes[srv.InviteCode] {
+						seenCodes[srv.InviteCode] = true
+						fmt.Fprintf(e.writer, "    [+] Discovered TARGET server for %q: %q (Invite: %s, Members: %d)\n",
+							sName, srv.GuildName, srv.InviteCode, srv.ApproximateMemberCount)
+						servers = append(servers, srv)
+					}
+				}
+			}
+		} else {
+			fmt.Fprintf(e.writer, "    [-] Disboard scraper not configured; skipping target server name search.\n")
+		}
+	}
+
 	if params.InvitesFile != "" {
 		fmt.Fprintf(e.writer, "[*] Loading invites from file: %s\n", params.InvitesFile)
 		loaded, err := disboard.LoadInvitesFromFile(params.InvitesFile, tag)
 		if err != nil {
 			return runID, fmt.Errorf("failed to load invites file: %w", err)
 		}
-		servers = append(servers, loaded...)
+		for _, s := range loaded {
+			if !seenCodes[s.InviteCode] {
+				seenCodes[s.InviteCode] = true
+				servers = append(servers, s)
+			}
+		}
 	}
 
 	if len(params.DirectCodes) > 0 {
 		direct := disboard.ParseDirectInvites(params.DirectCodes, tag)
-		servers = append(servers, direct...)
+		for _, s := range direct {
+			if !seenCodes[s.InviteCode] {
+				seenCodes[s.InviteCode] = true
+				servers = append(servers, s)
+			}
+		}
 	}
 
-	// If no direct invites given, scrape Disboard
-	if len(servers) == 0 && e.disboard != nil && params.Tag != "" {
-		fmt.Fprintf(e.writer, "[*] Discovering servers from Disboard (tag: %s, limit: %d)...\n", params.Tag, params.Limit)
-		discovered, err := e.disboard.Discover(ctx, params.Tag, params.Limit)
+	// 4.2 If servers list is still below limit and category tag specified, discover more by tag
+	limit := params.Limit
+	if limit <= 0 {
+		limit = 30
+	}
+
+	if len(servers) < limit && e.disboard != nil && params.Tag != "" {
+		needed := limit - len(servers)
+		fmt.Fprintf(e.writer, "[*] Discovering additional servers from Disboard (tag: %s, limit: %d)...\n", params.Tag, needed)
+		discovered, err := e.disboard.Discover(ctx, params.Tag, needed)
 		if err != nil {
 			e.logger.Warn("Disboard scraping encountered an error", zap.Error(err))
 			fmt.Fprintf(e.writer, "[!] Disboard warning: %v\n", err)
 		}
-		servers = append(servers, discovered...)
+		for _, s := range discovered {
+			if !seenCodes[s.InviteCode] {
+				seenCodes[s.InviteCode] = true
+				servers = append(servers, s)
+			}
+		}
 	}
 
 	if len(servers) == 0 {
@@ -168,10 +227,6 @@ func (e *Engine) Run(ctx context.Context, params SearchParams) (string, error) {
 	fmt.Fprintf(e.writer, "[+] Discovered %d candidate servers. Beginning walk...\n\n", len(servers))
 
 	// 5. Walk Servers
-	limit := params.Limit
-	if limit <= 0 {
-		limit = 30
-	}
 	scannedCount := 0
 
 	for _, srv := range servers {

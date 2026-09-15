@@ -124,6 +124,133 @@ func (s *Scraper) Discover(ctx context.Context, tag string, limit int) ([]Discov
 	return results, nil
 }
 
+// SearchByName queries Disboard for servers matching a specific keyword or server name.
+func (s *Scraper) SearchByName(ctx context.Context, serverName string, limit int) ([]DiscoveredServer, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+	serverName = strings.TrimSpace(serverName)
+	if serverName == "" {
+		return nil, nil
+	}
+
+	var results []DiscoveredServer
+	seenCodes := make(map[string]bool)
+	page := 1
+
+	for len(results) < limit {
+		pageURL := fmt.Sprintf("%s/search?keyword=%s&page=%d", s.BaseURL, url.QueryEscape(serverName), page)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
+		if err != nil {
+			return results, fmt.Errorf("failed to create disboard search request: %w", err)
+		}
+
+		req.Header.Set("User-Agent", s.UserAgent)
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+		if s.Cookies != "" {
+			req.Header.Set("Cookie", s.Cookies)
+		}
+
+		resp, err := s.HTTPClient.Do(req)
+		if err != nil {
+			return results, fmt.Errorf("disboard search request failed: %w", err)
+		}
+
+		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == 403 {
+			resp.Body.Close()
+			return results, fmt.Errorf("disboard blocked request with Cloudflare 403. Tip: pass 'disboard_cookies' with cf_clearance in config")
+		}
+		if resp.StatusCode == http.StatusNotFound {
+			resp.Body.Close()
+			break
+		}
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return results, fmt.Errorf("disboard returned HTTP %d: %s", resp.StatusCode, string(body))
+		}
+
+		servers, err := s.ParseHTML(resp.Body, "target_search")
+		resp.Body.Close()
+		if err != nil {
+			return results, fmt.Errorf("failed to parse disboard search results: %w", err)
+		}
+
+		if len(servers) == 0 {
+			break
+		}
+
+		newFound := 0
+		for _, srv := range servers {
+			if srv.InviteCode == "" || seenCodes[srv.InviteCode] {
+				continue
+			}
+			seenCodes[srv.InviteCode] = true
+			srv.Source = "disboard_name_search"
+			results = append(results, srv)
+			newFound++
+			if len(results) >= limit {
+				break
+			}
+		}
+
+		if newFound == 0 {
+			break
+		}
+
+		page++
+		if len(results) < limit && s.RequestDelay > 0 {
+			select {
+			case <-ctx.Done():
+				return results, ctx.Err()
+			case <-time.After(s.RequestDelay):
+			}
+		}
+	}
+
+	return results, nil
+}
+
+// DiscoverByServerNames searches Disboard for a list of server names (e.g. 2-10 targets), returning discovered servers.
+func (s *Scraper) DiscoverByServerNames(ctx context.Context, names []string, limitPerName int) ([]DiscoveredServer, error) {
+	if limitPerName <= 0 {
+		limitPerName = 3
+	}
+
+	var allResults []DiscoveredServer
+	seenCodes := make(map[string]bool)
+
+	for i, name := range names {
+		trimmed := strings.TrimSpace(name)
+		if trimmed == "" {
+			continue
+		}
+
+		if i > 0 && s.RequestDelay > 0 {
+			select {
+			case <-ctx.Done():
+				return allResults, ctx.Err()
+			case <-time.After(s.RequestDelay):
+			}
+		}
+
+		found, err := s.SearchByName(ctx, trimmed, limitPerName)
+		if err != nil {
+			return allResults, fmt.Errorf("search for server %q failed: %w", trimmed, err)
+		}
+
+		for _, srv := range found {
+			if srv.InviteCode != "" && !seenCodes[srv.InviteCode] {
+				seenCodes[srv.InviteCode] = true
+				allResults = append(allResults, srv)
+			}
+		}
+	}
+
+	return allResults, nil
+}
+
 // ParseHTML extracts DiscoveredServer entries from Disboard HTML body.
 func (s *Scraper) ParseHTML(r io.Reader, tag string) ([]DiscoveredServer, error) {
 	doc, err := goquery.NewDocumentFromReader(r)

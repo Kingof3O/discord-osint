@@ -168,3 +168,53 @@ func TestScraper_DiscoverWithMockServer(t *testing.T) {
 		t.Errorf("unexpected results: %+v", results)
 	}
 }
+
+func TestScraper_SearchByNameAndDiscoverByServerNames(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		keyword := r.URL.Query().Get("keyword")
+		w.Header().Set("Content-Type", "text/html")
+		if strings.Contains(keyword, "Alpha") {
+			fmt.Fprint(w, `<div class="server-card" data-id="901"><div class="server-name">Alpha Traders Guild</div><a href="/join/alpha-invite">Join</a></div>`)
+		} else if strings.Contains(keyword, "Beta") {
+			fmt.Fprint(w, `<div class="server-card" data-id="902"><div class="server-name">Beta Gaming Lounge</div><a href="/join/beta-invite">Join</a></div>`)
+		} else {
+			fmt.Fprint(w, `<div class="empty">No servers found</div>`)
+		}
+	}))
+	defer ts.Close()
+
+	scraper := NewScraper(ts.Client(), "")
+	scraper.BaseURL = ts.URL
+	scraper.RequestDelay = 1 * time.Millisecond
+
+	ctx := context.Background()
+
+	// 1. Test SearchByName
+	results, err := scraper.SearchByName(ctx, "Alpha", 2)
+	if err != nil {
+		t.Fatalf("SearchByName failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result for Alpha, got %d", len(results))
+	}
+	if results[0].GuildName != "Alpha Traders Guild" || results[0].InviteCode != "alpha-invite" {
+		t.Errorf("unexpected server result: %+v", results[0])
+	}
+	if results[0].Source != "disboard_name_search" {
+		t.Errorf("expected source disboard_name_search, got %s", results[0].Source)
+	}
+
+	// 2. Test DiscoverByServerNames with multiple target names
+	names := []string{"Alpha", "Beta", "NonExistent"}
+	allFound, err := scraper.DiscoverByServerNames(ctx, names, 1)
+	if err != nil {
+		t.Fatalf("DiscoverByServerNames failed: %v", err)
+	}
+	if len(allFound) != 2 {
+		t.Fatalf("expected 2 discovered servers for Alpha and Beta, got %d", len(allFound))
+	}
+	if allFound[0].InviteCode != "alpha-invite" || allFound[1].InviteCode != "beta-invite" {
+		t.Errorf("unexpected discovered servers: %+v", allFound)
+	}
+}
+
