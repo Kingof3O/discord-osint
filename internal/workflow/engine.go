@@ -339,7 +339,8 @@ func (e *Engine) processServer(
 
 	// 2. Join Guild with CAPTCHA Handling
 	var captchaToken, captchaRqToken string
-	for attempt := 0; attempt < 2; attempt++ {
+	var joined bool
+	for attempt := 0; attempt < 3; attempt++ {
 		joinResp, joinErr := e.discordClient.JoinGuild(ctx, srv.InviteCode, captchaToken, captchaRqToken)
 		if joinErr != nil {
 			var capErr *discord.CaptchaChallengeError
@@ -368,6 +369,7 @@ func (e *Engine) processServer(
 			}
 
 			// Other join error
+			fmt.Fprintf(e.writer, "[-] Failed to join %s: %v\n", scan.GuildName, joinErr)
 			scan.ScanStatus = "blocked"
 			scan.MemberStopReason = "join_failed"
 			scan.CompletedAt = time.Now().UTC()
@@ -378,8 +380,19 @@ func (e *Engine) processServer(
 		if joinResp != nil && joinResp.Guild != nil {
 			scan.GuildID = joinResp.Guild.ID
 			scan.GuildName = joinResp.Guild.Name
+			joined = true
+			fmt.Fprintf(e.writer, "[+] Successfully joined guild: %s (ID: %s)\n", scan.GuildName, scan.GuildID)
 		}
 		break
+	}
+
+	if !joined {
+		fmt.Fprintf(e.writer, "[-] Could not join %s after CAPTCHA attempts; skipping\n", scan.GuildName)
+		scan.ScanStatus = "blocked"
+		scan.MemberStopReason = "captcha_retries_exhausted"
+		scan.CompletedAt = time.Now().UTC()
+		_ = e.store.RecordGuildScanTransaction(ctx, scan, nil, nil)
+		return
 	}
 
 	// 2.1 Submit server rules screening to clear is_pending status

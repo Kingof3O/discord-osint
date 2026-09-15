@@ -215,6 +215,12 @@ func (c *Client) JoinGuild(ctx context.Context, inviteCode string, captchaToken,
 	payload := map[string]any{
 		"session_id": nil,
 	}
+	if captchaToken != "" {
+		payload["captcha_key"] = captchaToken
+	}
+	if captchaRqToken != "" {
+		payload["captcha_rqtoken"] = captchaRqToken
+	}
 	bodyData, _ := json.Marshal(payload)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(bodyData))
