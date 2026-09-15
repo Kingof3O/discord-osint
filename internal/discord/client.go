@@ -305,6 +305,70 @@ func (c *Client) LeaveGuild(ctx context.Context, guildID string) error {
 	return nil
 }
 
+// SubmitRulesScreening automatically fetches and accepts server rules verification to clear is_pending status.
+func (c *Client) SubmitRulesScreening(ctx context.Context, guildID string) error {
+	endpoint := fmt.Sprintf("%s/guilds/%s/member-verification", c.baseURL, guildID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.do(ctx, req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil // Guild does not require membership screening
+	}
+
+	var form struct {
+		Version    string `json:"version"`
+		FormFields []struct {
+			FieldType string `json:"field_type"`
+		} `json:"form_fields"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&form); err != nil {
+		return err
+	}
+
+	if len(form.FormFields) == 0 {
+		return nil
+	}
+
+	var fields []map[string]any
+	for _, f := range form.FormFields {
+		fields = append(fields, map[string]any{
+			"field_type": f.FieldType,
+			"response":   true,
+		})
+	}
+
+	payload := map[string]any{
+		"version":     form.Version,
+		"form_fields": fields,
+	}
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	putEndpoint := fmt.Sprintf("%s/guilds/%s/requests/@me", c.baseURL, guildID)
+	putReq, err := http.NewRequestWithContext(ctx, http.MethodPut, putEndpoint, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return err
+	}
+	putReq.Header.Set("Content-Type", "application/json")
+
+	putResp, err := c.do(ctx, putReq)
+	if err != nil {
+		return err
+	}
+	defer putResp.Body.Close()
+
+	return nil
+}
+
 // SearchGuildMembers searches members in a guild by username or display name prefix.
 func (c *Client) SearchGuildMembers(ctx context.Context, guildID string, query string, limit int) ([]GuildMemberResponse, error) {
 	if limit <= 0 {

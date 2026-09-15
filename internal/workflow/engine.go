@@ -382,6 +382,13 @@ func (e *Engine) processServer(
 		break
 	}
 
+	// 2.1 Submit server rules screening to clear is_pending status
+	if scan.GuildID != "" {
+		if err := e.discordClient.SubmitRulesScreening(ctx, scan.GuildID); err != nil {
+			e.logger.Debug("Rules screening notice", zap.String("guild", scan.GuildName), zap.Error(err))
+		}
+	}
+
 	defer func() {
 		if !stayAfterHit && scan.GuildID != "" {
 			_ = e.discordClient.LeaveGuild(ctx, scan.GuildID)
@@ -426,19 +433,17 @@ func (e *Engine) processServer(
 		scan.BestMatchStatus = "not_found"
 	}
 
-	// 5. Evidence Message Gathering (if match found)
+	// 5. Evidence Message Gathering & Direct Author Probe
 	var messages []store.MessageRecord
-	if scan.BestMatchStatus == "confirmed" || scan.BestMatchStatus == "candidate" {
-		fmt.Fprintf(e.writer, "[+] MATCH FOUND in %s: %s (%s)\n", scan.GuildName, scan.BestMatchStatus, scan.BestMatchReason)
+	targetID := confirmedTarget.TargetUserID
+	if scan.BestObservedUserID != "" {
+		targetID = scan.BestObservedUserID
+	}
 
-		targetQuery := confirmedTarget.TargetUsername
-		targetID := confirmedTarget.TargetUserID
-		if scan.BestObservedUserID != "" {
-			targetID = scan.BestObservedUserID
-		}
-
-		collectedMsgs, err := e.discordClient.SearchGuildMessages(ctx, scan.GuildID, targetID, targetQuery)
-		if err == nil {
+	// Search messages authored by targetID across guild (without restricting content)
+	if targetID != "" {
+		collectedMsgs, err := e.discordClient.SearchGuildMessages(ctx, scan.GuildID, targetID, "")
+		if err == nil && len(collectedMsgs) > 0 {
 			for _, m := range collectedMsgs {
 				messages = append(messages, store.MessageRecord{
 					RunID:             runID,
@@ -457,7 +462,23 @@ func (e *Engine) processServer(
 			}
 			scan.MessageCoverage = "bounded"
 			scan.MessagesExamined = len(messages)
+
+			// If not already confirmed, this author hit directly confirms target presence
+			if scan.BestMatchStatus != "confirmed" {
+				scan.BestMatchStatus = "confirmed"
+				scan.BestMatchReason = "message_author_id_exact"
+				scan.BestObservedUserID = targetID
+				if len(collectedMsgs) > 0 && collectedMsgs[0].Author.Username != "" {
+					scan.BestObservedUsername = collectedMsgs[0].Author.Username
+				}
+				fmt.Fprintf(e.writer, "[+] MATCH CONFIRMED via message evidence in %s: %d messages collected (Author: %s)\n",
+					scan.GuildName, len(messages), scan.BestObservedUsername)
+			}
 		}
+	}
+
+	if scan.BestMatchStatus == "confirmed" || scan.BestMatchStatus == "candidate" {
+		fmt.Fprintf(e.writer, "[+] Verified presence in %s: %s (%s)\n", scan.GuildName, scan.BestMatchStatus, scan.BestMatchReason)
 	}
 
 	scan.ScanStatus = "complete"
