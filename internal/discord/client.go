@@ -22,15 +22,21 @@ var (
 	ErrAccountLocked    = errors.New("account locked, quarantined, or requires phone verification")
 	ErrRateLimited      = errors.New("discord rate limited (HTTP 429)")
 	ErrForbidden        = errors.New("forbidden: missing permissions (HTTP 403)")
+	ErrNotFound         = errors.New("not found: resource does not exist (HTTP 404)")
 	ErrCaptchaChallenge = errors.New("captcha challenge triggered on request")
 )
 
 // CaptchaChallengeError wraps challenge details when Discord returns hCaptcha requirements.
 type CaptchaChallengeError struct {
-	Challenge captcha.Challenge
+	Challenge   captcha.Challenge
+	StatusCode  int
+	RawResponse string
 }
 
 func (e *CaptchaChallengeError) Error() string {
+	if len(e.Challenge.Errors) > 0 {
+		return fmt.Sprintf("captcha challenge required: service=%s sitekey=%s errors=%v", e.Challenge.Service, e.Challenge.SiteKey, e.Challenge.Errors)
+	}
 	return fmt.Sprintf("captcha challenge required: service=%s sitekey=%s", e.Challenge.Service, e.Challenge.SiteKey)
 }
 
@@ -178,6 +184,52 @@ func (c *Client) GetMe(ctx context.Context) (*User, error) {
 	return &u, nil
 }
 
+// UserGuild represents a guild membership returned by GET /users/@me/guilds.
+type UserGuild struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// GetMyGuilds fetches the list of servers the current account is already a member of.
+func (c *Client) GetMyGuilds(ctx context.Context) ([]UserGuild, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/users/@me/guilds", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.do(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get user guilds failed (%d): %s", resp.StatusCode, c.scrubber.Scrub(string(body)))
+	}
+
+	var guilds []UserGuild
+	if err := json.NewDecoder(resp.Body).Decode(&guilds); err != nil {
+		return nil, fmt.Errorf("failed to decode user guilds: %w", err)
+	}
+
+	return guilds, nil
+}
+
+// IsGuildMember checks whether the current account is already a member of a guild.
+func (c *Client) IsGuildMember(ctx context.Context, guildID string) (bool, error) {
+	guilds, err := c.GetMyGuilds(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, g := range guilds {
+		if g.ID == guildID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // ResolveInvite fetches invite metadata without joining the guild (read-only preflight).
 func (c *Client) ResolveInvite(ctx context.Context, inviteCode string) (*InviteMetadata, error) {
 	endpoint := fmt.Sprintf("%s/invites/%s?with_counts=true&with_expiration=true", c.baseURL, inviteCode)
@@ -209,11 +261,14 @@ func (c *Client) ResolveInvite(ctx context.Context, inviteCode string) (*InviteM
 }
 
 // JoinGuild attempts to join a Discord server via its invite code.
-func (c *Client) JoinGuild(ctx context.Context, inviteCode string, captchaToken, captchaRqToken string) (*JoinResponse, error) {
+func (c *Client) JoinGuild(ctx context.Context, inviteCode string, sessionID string, captchaToken, captchaRqToken, captchaSessionID string) (*JoinResponse, error) {
 	endpoint := fmt.Sprintf("%s/invites/%s", c.baseURL, inviteCode)
 
-	payload := map[string]any{
-		"session_id": nil,
+	payload := map[string]any{}
+	if sessionID != "" {
+		payload["session_id"] = sessionID
+	} else {
+		payload["session_id"] = nil
 	}
 	if captchaToken != "" {
 		payload["captcha_key"] = captchaToken
@@ -237,6 +292,9 @@ func (c *Client) JoinGuild(ctx context.Context, inviteCode string, captchaToken,
 	if captchaRqToken != "" {
 		req.Header.Set("X-Captcha-Rqtoken", captchaRqToken)
 	}
+	if captchaSessionID != "" {
+		req.Header.Set("X-Captcha-Session-Id", captchaSessionID)
+	}
 
 	resp, err := c.do(ctx, req)
 	if err != nil {
@@ -251,10 +309,15 @@ func (c *Client) JoinGuild(ctx context.Context, inviteCode string, captchaToken,
 		var joinResp JoinResponse
 		_ = json.Unmarshal(bodyBytes, &joinResp)
 
-		if joinResp.CaptchaSiteKey != "" || len(joinResp.CaptchaKey) > 0 {
+		if joinResp.CaptchaSiteKey != "" || len(joinResp.CaptchaKey) > 0 || joinResp.CaptchaSessionID != "" {
 			siteKey := joinResp.CaptchaSiteKey
-			if siteKey == "" && len(joinResp.CaptchaKey) > 0 {
-				siteKey = joinResp.CaptchaKey[0]
+			var discordErrors []string
+			if len(joinResp.CaptchaKey) > 0 {
+				discordErrors = joinResp.CaptchaKey
+				// Only fallback to first captcha_key if sitekey was completely blank and it looks like a valid key rather than an error string
+				if siteKey == "" && !strings.Contains(joinResp.CaptchaKey[0], " ") && !strings.Contains(joinResp.CaptchaKey[0], "-") {
+					siteKey = joinResp.CaptchaKey[0]
+				}
 			}
 			service := joinResp.CaptchaService
 			if service == "" {
@@ -262,11 +325,15 @@ func (c *Client) JoinGuild(ctx context.Context, inviteCode string, captchaToken,
 			}
 			return nil, &CaptchaChallengeError{
 				Challenge: captcha.Challenge{
-					Service: service,
-					SiteKey: siteKey,
-					RqData:  joinResp.CaptchaRqData,
-					RqToken: joinResp.CaptchaRqToken,
+					Service:   service,
+					SiteKey:   siteKey,
+					SessionID: joinResp.CaptchaSessionID,
+					RqData:    joinResp.CaptchaRqData,
+					RqToken:   joinResp.CaptchaRqToken,
+					Errors:    discordErrors,
 				},
+				StatusCode:  resp.StatusCode,
+				RawResponse: string(bodyBytes),
 			}
 		}
 
@@ -408,6 +475,39 @@ func (c *Client) SearchGuildMembers(ctx context.Context, guildID string, query s
 	return members, nil
 }
 
+// GetGuildMember fetches a specific member's record in a guild (returns 404 if user is not in guild).
+func (c *Client) GetGuildMember(ctx context.Context, guildID string, userID string) (*GuildMemberResponse, error) {
+	endpoint := fmt.Sprintf("%s/guilds/%s/members/%s", c.baseURL, guildID, userID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.do(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrNotFound
+	}
+	if resp.StatusCode == http.StatusForbidden {
+		return nil, ErrForbidden
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get guild member failed (%d): %s", resp.StatusCode, c.scrubber.Scrub(string(body)))
+	}
+
+	var member GuildMemberResponse
+	if err := json.NewDecoder(resp.Body).Decode(&member); err != nil {
+		return nil, fmt.Errorf("failed to decode guild member: %w", err)
+	}
+
+	return &member, nil
+}
+
 type searchMessagesResponse struct {
 	TotalResults int                `json:"total_results"`
 	Messages     [][]DiscordMessage `json:"messages"` // Discord returns array of message blocks
@@ -422,6 +522,7 @@ func (c *Client) SearchGuildMessages(ctx context.Context, guildID string, author
 	if query != "" {
 		v.Set("content", query)
 	}
+	v.Set("include_nsfw", "true")
 
 	endpoint := fmt.Sprintf("%s/guilds/%s/messages/search?%s", c.baseURL, guildID, v.Encode())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)

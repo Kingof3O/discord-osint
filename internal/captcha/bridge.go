@@ -70,7 +70,7 @@ const captchaHTMLTemplate = `<!DOCTYPE html>
     {{ if eq .Service "turnstile" }}
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     {{ else }}
-    <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+    <script src="https://js.hcaptcha.com/1/api.js?onload=onHCaptchaLoaded&render=explicit" async defer></script>
     {{ end }}
     <style>
         body {
@@ -109,7 +109,7 @@ const captchaHTMLTemplate = `<!DOCTYPE html>
             {{ if eq .Service "turnstile" }}
             <div class="cf-turnstile" data-sitekey="{{ .SiteKey }}" data-callback="onSuccess"></div>
             {{ else }}
-            <div class="h-captcha" data-sitekey="{{ .SiteKey }}" {{ if .RqData }}data-rqdata="{{ .RqData }}"{{ end }} data-callback="onSuccess"></div>
+            <div id="hcaptcha-widget" class="h-captcha" data-sitekey="{{ .SiteKey }}" {{ if .RqData }}data-rqdata="{{ .RqData }}"{{ end }} data-callback="onSuccess"></div>
             {{ end }}
         </div>
 
@@ -132,6 +132,28 @@ const captchaHTMLTemplate = `<!DOCTYPE html>
                 console.error('Submission failed', err);
             });
         }
+
+        window.onHCaptchaLoaded = function() {
+            try {
+                if (typeof hcaptcha !== 'undefined') {
+                    var container = document.getElementById('hcaptcha-widget');
+                    if (container && !container.hasChildNodes()) {
+                        var sitekey = container.getAttribute('data-sitekey');
+                        var rqdata = container.getAttribute('data-rqdata');
+                        var opts = {
+                            sitekey: sitekey,
+                            callback: onSuccess
+                        };
+                        if (rqdata) {
+                            opts.rqdata = rqdata;
+                        }
+                        hcaptcha.render(container, opts);
+                    }
+                }
+            } catch (err) {
+                console.warn('Programmatic hcaptcha.render note:', err);
+            }
+        };
     </script>
 </body>
 </html>`
@@ -139,6 +161,7 @@ const captchaHTMLTemplate = `<!DOCTYPE html>
 type templateData struct {
 	Service   string
 	SiteKey   string
+	SessionID string
 	RqData    string
 	GuildName string
 	Port      int
@@ -188,6 +211,7 @@ func (b *InteractiveBridge) Solve(ctx context.Context, ch Challenge) (Solution, 
 		data := templateData{
 			Service:   ch.Service,
 			SiteKey:   ch.SiteKey,
+			SessionID: ch.SessionID,
 			RqData:    ch.RqData,
 			GuildName: ch.GuildName,
 			Port:      port,
@@ -290,8 +314,9 @@ func (b *InteractiveBridge) Solve(ctx context.Context, ch Challenge) (Solution, 
 	case token := <-solutionChan:
 		fmt.Fprintf(b.writer, "\n[+] CAPTCHA Token received successfully (%d bytes).\n", len(token))
 		return Solution{
-			Token:   token,
-			RqToken: ch.RqToken,
+			Token:     token,
+			RqToken:   ch.RqToken,
+			SessionID: ch.SessionID,
 		}, nil
 	}
 }

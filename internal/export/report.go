@@ -2,6 +2,7 @@ package export
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -142,7 +143,7 @@ func GenerateMarkdownReport(
 	return b.String()
 }
 
-// GenerateHTMLReport generates a standalone, self-contained HTML investigation report with embedded styling.
+// GenerateHTMLReport generates a standalone, self-contained HTML investigation report with modern Discord-style glassmorphism.
 func GenerateHTMLReport(
 	run *store.RunRecord,
 	scans []store.GuildScanRecord,
@@ -176,6 +177,44 @@ func GenerateHTMLReport(
 		}
 	}
 
+	// Determine default Discord avatar using snowflake modulo 6
+	defaultAvatarURL := "https://cdn.discordapp.com/embed/avatars/0.png"
+	if run.TargetUserID != "" {
+		if id, err := strconv.ParseUint(run.TargetUserID, 10, 64); err == nil {
+			defaultAvatarURL = fmt.Sprintf("https://cdn.discordapp.com/embed/avatars/%d.png", (id>>22)%6)
+		}
+	}
+	targetAvatarURL := run.TargetAvatarURL
+	if targetAvatarURL == "" {
+		for _, obs := range observations {
+			if obs.ObservedGuildAvatarURL != "" {
+				targetAvatarURL = obs.ObservedGuildAvatarURL
+				break
+			}
+		}
+	}
+	if targetAvatarURL == "" {
+		targetAvatarURL = defaultAvatarURL
+	}
+
+	initial := "U"
+	if len(run.TargetUsername) > 0 {
+		initial = strings.ToUpper(run.TargetUsername[:1])
+	}
+
+	displayName := run.TargetDisplayName
+	if displayName == "" || displayName == run.TargetUsername {
+		for _, obs := range observations {
+			if obs.ObservedNick != "" {
+				displayName = obs.ObservedNick
+				break
+			}
+		}
+	}
+	if displayName == "" {
+		displayName = run.TargetUsername
+	}
+
 	b.WriteString(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -184,184 +223,651 @@ func GenerateHTMLReport(
 <title>Discord OSINT Report - ` + htmlEscape(run.TargetUsername) + ` (` + htmlEscape(run.RunID) + `)</title>
 <style>
 :root {
-  --bg-primary: #1e1f22;
-  --bg-secondary: #2b2d31;
-  --bg-tertiary: #313338;
+  --bg-base: #0b0c0e;
+  --bg-glow-1: rgba(88, 101, 242, 0.16);
+  --bg-glow-2: rgba(87, 242, 135, 0.10);
+  --bg-glow-3: rgba(235, 69, 158, 0.08);
+  --glass-card: rgba(28, 29, 34, 0.65);
+  --glass-card-hover: rgba(36, 38, 44, 0.75);
+  --glass-inner: rgba(18, 19, 23, 0.60);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-hover: rgba(88, 101, 242, 0.45);
   --accent: #5865f2;
-  --accent-hover: #4752c4;
+  --accent-glow: rgba(88, 101, 242, 0.35);
+  --text-header: #ffffff;
   --text-normal: #dbdee1;
   --text-muted: #949ba4;
-  --text-header: #ffffff;
-  --status-green: #23a55a;
-  --status-yellow: #f0b232;
-  --status-red: #f23f43;
+  --status-green: #57f287;
+  --status-green-glow: rgba(87, 242, 135, 0.25);
+  --status-yellow: #fee75c;
+  --status-yellow-glow: rgba(254, 231, 92, 0.25);
+  --status-red: #ed4245;
+  --status-red-glow: rgba(237, 66, 69, 0.25);
   --status-gray: #80848e;
-  --border: #3f4147;
+  --code-bg: rgba(0, 0, 0, 0.35);
+  --radius-lg: 16px;
+  --radius-md: 10px;
+  --radius-sm: 6px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background-color: var(--bg-primary);
+  background-color: var(--bg-base);
+  background-image:
+    radial-gradient(circle at 10% 15%, var(--bg-glow-1) 0%, transparent 40%),
+    radial-gradient(circle at 90% 85%, var(--bg-glow-2) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, var(--bg-glow-3) 0%, transparent 50%);
+  background-attachment: fixed;
   color: var(--text-normal);
   line-height: 1.5;
-  padding: 24px;
+  padding: 32px 20px;
+  min-height: 100vh;
 }
-.container { max-width: 1200px; margin: 0 auto; }
-header {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 24px;
-  margin-bottom: 24px;
+.container { max-width: 1240px; margin: 0 auto; }
+
+/* Top Navigation / Branding Bar */
+.top-nav {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 24px;
+  padding: 0 4px;
+}
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brand-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #5865f2 0%, #4752c4 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 16px;
+  box-shadow: 0 4px 14px var(--accent-glow);
+}
+.brand-text h1 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-header);
+  letter-spacing: -0.2px;
+}
+.brand-text p {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.nav-actions {
+  display: flex;
+  gap: 10px;
+}
+.action-btn {
+  background: var(--glass-card);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  color: var(--text-normal);
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+.action-btn:hover {
+  background: var(--glass-card-hover);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--text-header);
+}
+
+/* Discord Profile Hero Card */
+.discord-profile-card {
+  background: var(--glass-card);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-bottom: 28px;
+}
+.profile-banner {
+  height: 130px;
+  background: linear-gradient(135deg, #5865f2 0%, #2b3b75 40%, #171c2f 100%);
+  position: relative;
+}
+.profile-body {
+  padding: 0 28px 24px 28px;
+  position: relative;
+}
+.avatar-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: -50px;
+  margin-bottom: 16px;
   flex-wrap: wrap;
   gap: 16px;
 }
-.target-identity { display: flex; align-items: center; gap: 16px; }
-.avatar {
-  width: 64px;
-  height: 64px;
+.avatar-wrapper {
+  position: relative;
+  width: 100px;
+  height: 100px;
+}
+.discord-avatar {
+  width: 100px;
+  height: 100px;
   border-radius: 50%;
+  border: 6px solid #16171b;
   background-color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
-  font-weight: bold;
-  color: #fff;
+  font-size: 38px;
+  font-weight: 700;
+  color: #ffffff;
   overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
 }
-.avatar img { width: 100%; height: 100%; object-fit: cover; }
-h1 { font-size: 24px; color: var(--text-header); }
-.meta-text { color: var(--text-muted); font-size: 14px; }
-.badge {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 4px;
+.discord-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.presence-badge {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 4px solid #16171b;
+  background-color: var(--status-green);
+  box-shadow: 0 0 8px var(--status-green-glow);
+}
+.target-title-block {
+  margin-bottom: 16px;
+}
+.target-display-name {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text-header);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.target-handle {
+  font-size: 15px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-top: 2px;
+}
+.chips-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.discord-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: rgba(88, 101, 242, 0.12);
+  border: 1px solid rgba(88, 101, 242, 0.25);
+  border-radius: 20px;
   font-size: 12px;
   font-weight: 600;
-  text-transform: uppercase;
+  color: #b5bac1;
 }
-.badge-confirmed { background-color: rgba(35, 165, 90, 0.2); color: var(--status-green); border: 1px solid var(--status-green); }
-.badge-candidate { background-color: rgba(240, 178, 50, 0.2); color: var(--status-yellow); border: 1px solid var(--status-yellow); }
-.badge-notfound { background-color: rgba(128, 132, 142, 0.2); color: var(--status-gray); border: 1px solid var(--status-gray); }
-.badge-blocked { background-color: rgba(242, 63, 67, 0.2); color: var(--status-red); border: 1px solid var(--status-red); }
-.badge-running { background-color: rgba(88, 101, 242, 0.2); color: var(--accent); border: 1px solid var(--accent); }
+.discord-chip.active {
+  background: rgba(88, 101, 242, 0.22);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+.profile-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--glass-border);
+}
+.meta-item {
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+}
+.meta-item-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.meta-item-value {
+  font-size: 13px;
+  color: var(--text-header);
+  font-family: monospace;
+  word-break: break-all;
+}
+
+/* KPI Stat Cards */
 .grid-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 .stat-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
+  background: var(--glass-card);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 18px;
   text-align: center;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
 }
-.stat-val { font-size: 28px; font-weight: bold; color: var(--text-header); margin-top: 4px; }
-.section {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 24px;
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--glass-border-hover);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
 }
-.section h2 { font-size: 18px; color: var(--text-header); margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; }
-th, td { padding: 12px 14px; border-bottom: 1px solid var(--border); }
-th { background-color: var(--bg-tertiary); color: var(--text-header); }
-tr:hover { background-color: rgba(255, 255, 255, 0.02); }
-.obs-card {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+.stat-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.stat-val {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--text-header);
+  line-height: 1.1;
+}
+
+/* Glass Panels */
+.glass-panel {
+  background: var(--glass-card);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+  padding: 24px;
+  margin-bottom: 28px;
+}
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--glass-border);
+}
+.panel-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-header);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.panel-count {
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 8px;
+  border-radius: 12px;
+  color: var(--text-muted);
+}
+
+/* Tables */
+.table-wrapper {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-inner);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  text-align: left;
+}
+th, td {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--glass-border);
+}
+th {
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(255, 255, 255, 0.02); }
+
+/* Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
   border-radius: 6px;
-  padding: 16px;
-  margin-bottom: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
-.obs-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.msg-item {
-  background: var(--bg-tertiary);
-  border-left: 4px solid var(--accent);
-  padding: 10px 14px;
+.badge-confirmed {
+  background: rgba(87, 242, 135, 0.15);
+  color: var(--status-green);
+  border: 1px solid rgba(87, 242, 135, 0.35);
+  box-shadow: 0 0 10px var(--status-green-glow);
+}
+.badge-candidate {
+  background: rgba(254, 231, 92, 0.15);
+  color: var(--status-yellow);
+  border: 1px solid rgba(254, 231, 92, 0.35);
+  box-shadow: 0 0 10px var(--status-yellow-glow);
+}
+.badge-notfound {
+  background: rgba(148, 155, 164, 0.15);
+  color: var(--status-gray);
+  border: 1px solid rgba(148, 155, 164, 0.25);
+}
+.badge-blocked {
+  background: rgba(237, 66, 69, 0.15);
+  color: var(--status-red);
+  border: 1px solid rgba(237, 66, 69, 0.35);
+  box-shadow: 0 0 10px var(--status-red-glow);
+}
+.code-chip {
+  background: var(--code-bg);
+  border: 1px solid var(--glass-border);
   border-radius: 4px;
-  margin-bottom: 8px;
-  font-size: 13px;
+  padding: 2px 7px;
+  font-family: monospace;
+  font-size: 12px;
+  color: #c9cdfb;
 }
-.msg-meta { color: var(--text-muted); font-size: 12px; margin-bottom: 4px; }
-footer { text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 32px; }
+
+/* Discord Style Observations */
+.obs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.obs-card {
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  transition: all 0.15s ease;
+}
+.obs-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(24, 25, 30, 0.7);
+}
+.obs-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.guild-header-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-header);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.obs-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+.role-pills-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
+}
+.role-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 3px 9px;
+  font-size: 12px;
+  color: #dbdee1;
+}
+.role-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Discord Style Messages Stream */
+.discord-msg-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.discord-msg {
+  display: flex;
+  gap: 16px;
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  transition: all 0.15s ease;
+}
+.discord-msg:hover {
+  background: rgba(36, 38, 44, 0.65);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.msg-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #ffffff;
+  font-size: 16px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.msg-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.msg-body {
+  flex: 1;
+  min-width: 0;
+}
+.msg-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.msg-author {
+  font-weight: 700;
+  color: var(--text-header);
+  font-size: 14.5px;
+}
+.msg-chan-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(88, 101, 242, 0.15);
+  color: #a3a9b7;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: monospace;
+}
+.msg-timestamp {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.msg-text {
+  color: var(--text-normal);
+  font-size: 14.5px;
+  line-height: 1.5;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+/* Footer */
+footer {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 36px;
+  padding: 16px;
+  border-top: 1px solid var(--glass-border);
+}
 </style>
 </head>
 <body>
 <div class="container">
-  <header>
-    <div class="target-identity">
-      <div class="avatar">`)
 
-	if run.TargetAvatarURL != "" {
-		b.WriteString(`<img src="` + htmlEscape(run.TargetAvatarURL) + `" alt="Avatar">`)
-	} else {
-		initial := "U"
-		if len(run.TargetUsername) > 0 {
-			initial = strings.ToUpper(run.TargetUsername[:1])
-		}
-		b.WriteString(htmlEscape(initial))
-	}
-
-	b.WriteString(`</div>
-      <div>
-        <h1>` + htmlEscape(run.TargetUsername) + `</h1>
-        <div class="meta-text">User ID: <code>` + htmlEscape(run.TargetUserID) + `</code> | Created: ` + htmlEscape(accountCreated) + `</div>
-        <div class="meta-text">Display: ` + htmlEscape(run.TargetDisplayName) + ` | Source: ` + htmlEscape(run.TargetResolutionSource) + `</div>
+  <!-- Top Bar -->
+  <div class="top-nav">
+    <div class="brand-group">
+      <div class="brand-icon">DO</div>
+      <div class="brand-text">
+        <h1>Discord OSINT Investigation Report</h1>
+        <p>Strict Forensic Audit Provenance &bull; Generated ` + htmlEscape(time.Now().UTC().Format("2006-01-02 15:04:05 UTC")) + `</p>
       </div>
     </div>
-    <div>
-      <div class="meta-text">Run ID: <code>` + htmlEscape(run.RunID) + `</code></div>
-      <div class="meta-text">Category Tag: <code>` + htmlEscape(run.Tag) + `</code></div>
-      <div class="meta-text">Generated: ` + htmlEscape(time.Now().UTC().Format("2006-01-02 15:04:05 UTC")) + `</div>
+    <div class="nav-actions">
+      <button onclick="window.print()" class="action-btn">
+        <span>🖨️</span> Print / Export PDF
+      </button>
     </div>
-  </header>
+  </div>
 
+  <!-- Discord Profile Card -->
+  <div class="discord-profile-card">
+    <div class="profile-banner"></div>
+    <div class="profile-body">
+      <div class="avatar-row">
+        <div class="avatar-wrapper">
+          <div class="discord-avatar">
+            <img src="` + htmlEscape(targetAvatarURL) + `" alt="Avatar" onerror="this.src='` + htmlEscape(defaultAvatarURL) + `';this.onerror=function(){this.style.display='none';this.parentNode.innerText='` + htmlEscape(initial) + `'};">
+          </div>
+          <div class="presence-badge" title="Target Online/Active Status"></div>
+        </div>
+        <div class="chips-row">
+          <span class="discord-chip active">🛡️ TARGET IDENTITY</span>
+          <span class="discord-chip">SOURCE: ` + htmlEscape(run.TargetResolutionSource) + `</span>
+          <span class="discord-chip">RUN: ` + htmlEscape(run.RunID) + `</span>
+        </div>
+      </div>
+
+      <div class="target-title-block">
+        <div class="target-display-name">
+          ` + htmlEscape(displayName) + `
+        </div>
+        <div class="target-handle">@` + htmlEscape(run.TargetUsername) + `</div>
+      </div>
+
+      <div class="profile-meta-grid">
+        <div class="meta-item">
+          <div class="meta-item-label">Target Snowflake ID</div>
+          <div class="meta-item-value">` + htmlEscape(run.TargetUserID) + `</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-item-label">Account Created</div>
+          <div class="meta-item-value">` + htmlEscape(accountCreated) + `</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-item-label">Category Tag / Domain</div>
+          <div class="meta-item-value">` + htmlEscape(run.Tag) + `</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-item-label">Verification Provenance</div>
+          <div class="meta-item-value">` + htmlEscape(run.TargetVerifiedAt.Format("2006-01-02 15:04:05 UTC")) + `</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI Cards -->
   <div class="grid-stats">
     <div class="stat-card">
-      <div class="meta-text">Servers Examined</div>
+      <div class="stat-label">Servers Examined</div>
       <div class="stat-val">` + fmt.Sprintf("%d", len(scans)) + `</div>
     </div>
-    <div class="stat-card">
-      <div class="meta-text">Confirmed Presence</div>
+    <div class="stat-card" style="box-shadow: 0 4px 20px var(--status-green-glow);">
+      <div class="stat-label" style="color: var(--status-green);">Confirmed Presence</div>
       <div class="stat-val" style="color: var(--status-green);">` + fmt.Sprintf("%d", confirmedCount) + `</div>
     </div>
-    <div class="stat-card">
-      <div class="meta-text">Candidate Presence</div>
+    <div class="stat-card" style="box-shadow: 0 4px 20px var(--status-yellow-glow);">
+      <div class="stat-label" style="color: var(--status-yellow);">Candidate Presence</div>
       <div class="stat-val" style="color: var(--status-yellow);">` + fmt.Sprintf("%d", candidateCount) + `</div>
     </div>
     <div class="stat-card">
-      <div class="meta-text">Absence Verified</div>
+      <div class="stat-label">Absence Verified</div>
       <div class="stat-val">` + fmt.Sprintf("%d", notFoundCount) + `</div>
     </div>
-    <div class="stat-card">
-      <div class="meta-text">Gated / Blocked</div>
+    <div class="stat-card" style="box-shadow: 0 4px 20px var(--status-red-glow);">
+      <div class="stat-label" style="color: var(--status-red);">Gated / Blocked</div>
       <div class="stat-val" style="color: var(--status-red);">` + fmt.Sprintf("%d", blockedCount) + `</div>
     </div>
   </div>
 
-  <div class="section">
-    <h2>Server Scan Overview</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Server Name</th>
-          <th>Invite</th>
-          <th>Scan Status</th>
-          <th>Match Status</th>
-          <th>Reason</th>
-          <th>Member Coverage</th>
-        </tr>
-      </thead>
-      <tbody>`)
+  <!-- Scanned Servers Section -->
+  <div class="glass-panel">
+    <div class="panel-header">
+      <h2>🌐 Scanned Server Findings <span class="panel-count">` + fmt.Sprintf("%d servers", len(scans)) + `</span></h2>
+    </div>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Server Name</th>
+            <th>Invite Code</th>
+            <th>Scan Status</th>
+            <th>Match Status</th>
+            <th>Match Reason</th>
+            <th>Member Coverage</th>
+          </tr>
+        </thead>
+        <tbody>`)
 
 	for _, s := range scans {
 		badgeClass := "badge-notfound"
@@ -377,14 +883,15 @@ footer { text-align: center; color: var(--text-muted); font-size: 12px; margin-t
 			badgeClass = "badge-blocked"
 		}
 
-		b.WriteString(fmt.Sprintf(`<tr>
-          <td><strong>%s</strong></td>
-          <td><code>%s</code></td>
-          <td>%s</td>
-          <td><span class="badge %s">%s</span></td>
-          <td>%s</td>
-          <td>%s</td>
-        </tr>`,
+		b.WriteString(fmt.Sprintf(`
+          <tr>
+            <td><strong>%s</strong></td>
+            <td><span class="code-chip">%s</span></td>
+            <td>%s</td>
+            <td><span class="badge %s">%s</span></td>
+            <td>%s</td>
+            <td>%s</td>
+          </tr>`,
 			htmlEscape(s.GuildName),
 			htmlEscape(s.InviteCode),
 			htmlEscape(s.ScanStatus),
@@ -395,87 +902,145 @@ footer { text-align: center; color: var(--text-muted); font-size: 12px; margin-t
 		))
 	}
 
-	b.WriteString(`</tbody>
-    </table>
+	b.WriteString(`
+        </tbody>
+      </table>
+    </div>
   </div>
 
-  <div class="section">
-    <h2>Identity Observations & Findings</h2>`)
+  <!-- Identity Observations & Findings -->
+  <div class="glass-panel">
+    <div class="panel-header">
+      <h2>🔎 Target Identity Observations & Evidence <span class="panel-count">` + fmt.Sprintf("%d observations", len(observations)) + `</span></h2>
+    </div>`)
 
 	if len(observations) == 0 {
-		b.WriteString(`<p class="meta-text">No target identity matches observed in the scanned servers.</p>`)
+		b.WriteString(`<p style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 24px;">No target identity matches observed in the scanned servers.</p>`)
 	} else {
+		b.WriteString(`<div class="obs-list">`)
 		for _, obs := range observations {
 			badgeClass := "badge-candidate"
 			if obs.MatchStatus == "confirmed" {
 				badgeClass = "badge-confirmed"
 			}
-			rolesStr := "None"
-			if len(obs.ObservedRoles) > 0 {
-				rolesStr = strings.Join(obs.ObservedRoles, ", ")
+
+			nickDisplay := "-"
+			if obs.ObservedNick != "" {
+				nickDisplay = obs.ObservedNick
+			}
+
+			joinedDisplay := "Unknown"
+			if obs.ObservedJoinedAt != "" {
+				joinedDisplay = obs.ObservedJoinedAt
 			}
 
 			b.WriteString(fmt.Sprintf(`
-      <div class="obs-card">
-        <div class="obs-header">
-          <div>
-            <strong>%s</strong> (Guild ID: <code>%s</code>)
+        <div class="obs-card">
+          <div class="obs-top-bar">
+            <div class="guild-header-title">
+              <span>🏛️ Guild: <code>%s</code></span>
+              <span style="color: var(--text-muted);">&bull;</span>
+              <span>Observed: <strong>@%s</strong></span>
+            </div>
+            <span class="badge %s">%s</span>
           </div>
-          <span class="badge %s">%s</span>
-        </div>
-        <div class="meta-text" style="margin-bottom: 4px;"><strong>Observed User ID:</strong> <code>%s</code> | <strong>Nick:</strong> %s</div>
-        <div class="meta-text" style="margin-bottom: 4px;"><strong>Joined Guild At:</strong> %s | <strong>Roles:</strong> %s</div>
-        <div class="meta-text"><strong>Match Reason:</strong> %s | <strong>Acquisition Method:</strong> %s at %s</div>
-      </div>`,
-				htmlEscape(obs.ObservedUsername),
+
+          <div class="obs-details-grid">
+            <div><span style="color: var(--text-muted);">Observed Snowflake:</span> <code class="code-chip">%s</code></div>
+            <div><span style="color: var(--text-muted);">Server Nickname:</span> <strong>%s</strong></div>
+            <div><span style="color: var(--text-muted);">Joined Server:</span> %s</div>
+            <div><span style="color: var(--text-muted);">Match Reason:</span> <code class="code-chip">%s</code></div>
+          </div>
+
+          <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">
+            Acquisition: <code>%s</code> at %s
+          </div>`,
 				htmlEscape(obs.GuildID),
+				htmlEscape(obs.ObservedUsername),
 				badgeClass,
 				htmlEscape(string(obs.MatchStatus)),
 				htmlEscape(obs.ObservedUserID),
-				htmlEscape(obs.ObservedNick),
-				htmlEscape(obs.ObservedJoinedAt),
-				htmlEscape(rolesStr),
+				htmlEscape(nickDisplay),
+				htmlEscape(joinedDisplay),
 				htmlEscape(string(obs.MatchReason)),
 				htmlEscape(obs.AcquisitionMethod),
 				htmlEscape(obs.ObservedAt.Format(time.RFC3339)),
 			))
+
+			if len(obs.ObservedRoles) > 0 {
+				b.WriteString(`<div class="role-pills-row"><span style="font-size: 12px; color: var(--text-muted); margin-right: 4px;">Assigned Roles:</span>`)
+				for _, r := range obs.ObservedRoles {
+					b.WriteString(`<span class="role-pill"><span class="role-dot"></span>` + htmlEscape(r) + `</span>`)
+				}
+				b.WriteString(`</div>`)
+			}
+
+			b.WriteString(`</div>`)
 		}
+		b.WriteString(`</div>`)
 	}
 
-	b.WriteString(`</div>
+	b.WriteString(`
+  </div>
 
-  <div class="section">
-    <h2>Message Evidence Highlights</h2>`)
+  <!-- Message Evidence Highlights -->
+  <div class="glass-panel">
+    <div class="panel-header">
+      <h2>💬 Captured Message Evidence Highlights <span class="panel-count">` + fmt.Sprintf("%d captured", len(messages)) + `</span></h2>
+    </div>`)
 
 	if len(messages) == 0 {
-		b.WriteString(`<p class="meta-text">No message records captured during this investigation.</p>`)
+		b.WriteString(`<p style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 24px;">No message records captured during this investigation run.</p>`)
 	} else {
-		limit := 15
-		if len(messages) < limit {
-			limit = len(messages)
-		}
-		for _, m := range messages[:limit] {
+		b.WriteString(`<div class="discord-msg-stream">`)
+		for _, m := range messages {
+			msgInitial := "U"
+			if len(m.AuthorUsername) > 0 {
+				msgInitial = strings.ToUpper(m.AuthorUsername[:1])
+			}
+
+			msgAvatar := defaultAvatarURL
+			if m.AuthorID != "" && m.AuthorID == run.TargetUserID && targetAvatarURL != "" {
+				msgAvatar = targetAvatarURL
+			} else if m.AuthorID != "" {
+				if id, err := strconv.ParseUint(m.AuthorID, 10, 64); err == nil {
+					msgAvatar = fmt.Sprintf("https://cdn.discordapp.com/embed/avatars/%d.png", (id>>22)%6)
+				}
+			}
+
 			b.WriteString(fmt.Sprintf(`
-      <div class="msg-item">
-        <div class="msg-meta">[%s] <strong>%s</strong> (Channel: <code>%s</code>)</div>
-        <div>%s</div>
-      </div>`,
-				htmlEscape(m.Timestamp.Format("2006-01-02 15:04:05 UTC")),
+        <div class="discord-msg">
+          <div class="msg-avatar">
+            <img src="%s" alt="%s" onerror="this.style.display='none';this.parentNode.innerText='%s'">
+          </div>
+          <div class="msg-body">
+            <div class="msg-meta-row">
+              <span class="msg-author">%s</span>
+              <span class="msg-chan-pill">#%s</span>
+              <span class="msg-timestamp">%s</span>
+            </div>
+            <div class="msg-text">%s</div>
+          </div>
+        </div>`,
+				htmlEscape(msgAvatar),
+				htmlEscape(m.AuthorUsername),
+				htmlEscape(msgInitial),
 				htmlEscape(m.AuthorUsername),
 				htmlEscape(m.ChannelID),
+				htmlEscape(m.Timestamp.Format("2006-01-02 15:04:05 UTC")),
 				htmlEscape(m.Content),
 			))
 		}
-		if len(messages) > limit {
-			b.WriteString(fmt.Sprintf(`<p class="meta-text" style="margin-top: 12px;">Showing first %d messages. Full message corpus is preserved in <code>messages.csv</code>.</p>`, limit))
-		}
+		b.WriteString(`</div>`)
 	}
 
-	b.WriteString(`</div>
+	b.WriteString(`
+  </div>
 
   <footer>
-    Discord OSINT Investigation Report &mdash; Generated with Anti-Bot Hardening & Strict Audit Provenance
+    Discord OSINT Investigation Platform &bull; Anti-Bot Hardened Provenance Engine &bull; Strictly Partitioned Sandbox Run
   </footer>
+
 </div>
 </body>
 </html>`)

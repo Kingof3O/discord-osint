@@ -55,12 +55,33 @@ func TestClient_JoinAndCaptchaDetection(t *testing.T) {
 		}
 
 		if strings.HasSuffix(r.URL.Path, "/invites/captcha-guild") {
+			if r.Header.Get("X-Captcha-Key") == "solved-token-xyz" {
+				if r.Header.Get("X-Captcha-Rqtoken") != "sample-rqtoken" {
+					t.Errorf("expected X-Captcha-Rqtoken header")
+				}
+				if r.Header.Get("X-Captcha-Session-Id") != "sample-session-id" {
+					t.Errorf("expected X-Captcha-Session-Id header")
+				}
+				w.WriteHeader(http.StatusOK)
+				resp := map[string]any{
+					"code": "captcha-guild",
+					"guild": map[string]any{
+						"id":   "guild_solved_123",
+						"name": "Solved Captcha Guild",
+					},
+				}
+				_ = json.NewEncoder(w).Encode(resp)
+				return
+			}
+
 			w.WriteHeader(http.StatusBadRequest)
 			resp := map[string]any{
-				"captcha_sitekey": "a9b5fb07-92ff-493f-86fe-352a2843b3df",
-				"captcha_service": "hcaptcha",
-				"captcha_rqdata":  "sample-rqdata",
-				"captcha_rqtoken": "sample-rqtoken",
+				"captcha_sitekey":    "a9b5fb07-92ff-493f-86fe-352a2843b3df",
+				"captcha_service":    "hcaptcha",
+				"captcha_session_id": "sample-session-id",
+				"captcha_rqdata":     "sample-rqdata",
+				"captcha_rqtoken":    "sample-rqtoken",
+				"captcha_key":        []string{"You need to update your app to join this server."},
 			}
 			_ = json.NewEncoder(w).Encode(resp)
 			return
@@ -92,7 +113,7 @@ func TestClient_JoinAndCaptchaDetection(t *testing.T) {
 	}
 
 	// 1. Test clean join
-	res, err := client.JoinGuild(context.Background(), "clean-guild", "", "")
+	res, err := client.JoinGuild(context.Background(), "clean-guild", "gw-session-123", "", "", "")
 	if err != nil {
 		t.Fatalf("JoinGuild clean failed: %v", err)
 	}
@@ -101,7 +122,7 @@ func TestClient_JoinAndCaptchaDetection(t *testing.T) {
 	}
 
 	// 2. Test join triggering CAPTCHA
-	_, err = client.JoinGuild(context.Background(), "captcha-guild", "", "")
+	_, err = client.JoinGuild(context.Background(), "captcha-guild", "gw-session-123", "", "", "")
 	if err == nil {
 		t.Fatalf("expected CAPTCHA error, got nil")
 	}
@@ -113,8 +134,23 @@ func TestClient_JoinAndCaptchaDetection(t *testing.T) {
 	if captchaErr.Challenge.SiteKey != "a9b5fb07-92ff-493f-86fe-352a2843b3df" {
 		t.Errorf("unexpected sitekey: %s", captchaErr.Challenge.SiteKey)
 	}
+	if captchaErr.Challenge.SessionID != "sample-session-id" {
+		t.Errorf("unexpected sessionID: %s", captchaErr.Challenge.SessionID)
+	}
 	if captchaErr.Challenge.RqToken != "sample-rqtoken" {
 		t.Errorf("unexpected rqtoken: %s", captchaErr.Challenge.RqToken)
+	}
+	if len(captchaErr.Challenge.Errors) == 0 || captchaErr.Challenge.Errors[0] != "You need to update your app to join this server." {
+		t.Errorf("unexpected challenge errors: %v", captchaErr.Challenge.Errors)
+	}
+
+	// 3. Test retry with solved CAPTCHA token and session ID
+	retryRes, err := client.JoinGuild(context.Background(), "captcha-guild", "gw-session-123", "solved-token-xyz", captchaErr.Challenge.RqToken, captchaErr.Challenge.SessionID)
+	if err != nil {
+		t.Fatalf("JoinGuild retry with CAPTCHA failed: %v", err)
+	}
+	if retryRes.Guild == nil || retryRes.Guild.ID != "guild_solved_123" {
+		t.Errorf("unexpected join retry result: %+v", retryRes)
 	}
 }
 

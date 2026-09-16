@@ -137,6 +137,19 @@ func (s *Store) UpdateRunStatus(ctx context.Context, runID, status string) error
 	return nil
 }
 
+// UpdateRunTargetProfile updates the target's avatar URL and display name if newly discovered during scans.
+func (s *Store) UpdateRunTargetProfile(ctx context.Context, runID, avatarURL, displayName string) error {
+	query := `UPDATE runs SET 
+		target_avatar_url = CASE WHEN (target_avatar_url = '' OR target_avatar_url IS NULL) AND ? != '' THEN ? ELSE target_avatar_url END,
+		target_display_name = CASE WHEN (target_display_name = '' OR target_display_name = target_username) AND ? != '' THEN ? ELSE target_display_name END
+		WHERE run_id = ?;`
+	_, err := s.db.ExecContext(ctx, query, avatarURL, avatarURL, displayName, displayName, runID)
+	if err != nil {
+		return fmt.Errorf("failed to update run target profile: %w", err)
+	}
+	return nil
+}
+
 // ListRuns returns all runs with aggregated scan statistics ordered from newest to oldest.
 func (s *Store) ListRuns(ctx context.Context) ([]RunSummary, error) {
 	query := `

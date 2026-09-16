@@ -14,18 +14,21 @@ var (
 
 // Challenge represents a CAPTCHA challenge presented by Discord or a gateway service.
 type Challenge struct {
-	Service   string `json:"service"` // "hcaptcha" | "recaptcha" | "turnstile"
-	SiteKey   string `json:"site_key"`
-	RqData    string `json:"rq_data,omitempty"`
-	RqToken   string `json:"rq_token,omitempty"`
-	GuildID   string `json:"guild_id,omitempty"`
-	GuildName string `json:"guild_name,omitempty"`
+	Service   string   `json:"service"` // "hcaptcha" | "recaptcha" | "turnstile"
+	SiteKey   string   `json:"site_key"`
+	SessionID string   `json:"session_id,omitempty"`
+	RqData    string   `json:"rq_data,omitempty"`
+	RqToken   string   `json:"rq_token,omitempty"`
+	GuildID   string   `json:"guild_id,omitempty"`
+	GuildName string   `json:"guild_name,omitempty"`
+	Errors    []string `json:"errors,omitempty"`
 }
 
 // Solution contains the solved verification payload to attach to the retried request.
 type Solution struct {
-	Token   string `json:"token"`
-	RqToken string `json:"rq_token,omitempty"`
+	Token     string `json:"token"`
+	RqToken   string `json:"rq_token,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // Solver defines the interface for acquiring CAPTCHA solutions.

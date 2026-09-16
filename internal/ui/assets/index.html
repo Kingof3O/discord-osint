@@ -6,26 +6,43 @@
 <title>Discord OSINT Dashboard</title>
 <style>
 :root {
-  --bg-darkest: #111214;
-  --bg-sidebar: #1e1f22;
-  --bg-main: #2b2d31;
-  --bg-card: #313338;
-  --bg-card-hover: #383a40;
+  --bg-base: #0b0c0e;
+  --bg-sidebar: rgba(18, 19, 23, 0.75);
+  --bg-glow-1: rgba(88, 101, 242, 0.15);
+  --bg-glow-2: rgba(87, 242, 135, 0.10);
+  --bg-glow-3: rgba(235, 69, 158, 0.08);
+  --glass-card: rgba(28, 29, 35, 0.65);
+  --glass-card-hover: rgba(36, 38, 46, 0.78);
+  --glass-inner: rgba(16, 17, 21, 0.62);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-hover: rgba(88, 101, 242, 0.45);
   --accent: #5865f2;
+  --accent-glow: rgba(88, 101, 242, 0.35);
   --accent-hover: #4752c4;
+  --text-header: #ffffff;
   --text-normal: #dbdee1;
   --text-muted: #949ba4;
-  --text-header: #ffffff;
-  --status-green: #23a55a;
-  --status-yellow: #f0b232;
-  --status-red: #f23f43;
+  --status-green: #57f287;
+  --status-green-glow: rgba(87, 242, 135, 0.25);
+  --status-yellow: #fee75c;
+  --status-yellow-glow: rgba(254, 231, 92, 0.25);
+  --status-red: #ed4245;
+  --status-red-glow: rgba(237, 66, 69, 0.25);
   --status-gray: #80848e;
-  --border: #3f4147;
+  --code-bg: rgba(0, 0, 0, 0.38);
+  --radius-lg: 16px;
+  --radius-md: 10px;
+  --radius-sm: 6px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background-color: var(--bg-darkest);
+  background-color: var(--bg-base);
+  background-image:
+    radial-gradient(circle at 10% 15%, var(--bg-glow-1) 0%, transparent 40%),
+    radial-gradient(circle at 90% 85%, var(--bg-glow-2) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, var(--bg-glow-3) 0%, transparent 50%);
+  background-attachment: fixed;
   color: var(--text-normal);
   display: flex;
   height: 100vh;
@@ -34,157 +51,309 @@ body {
 
 /* Sidebar */
 .sidebar {
-  width: 320px;
-  background-color: var(--bg-sidebar);
-  border-right: 1px solid var(--border);
+  width: 330px;
+  background: var(--bg-sidebar);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border-right: 1px solid var(--glass-border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  z-index: 10;
 }
 .sidebar-header {
-  padding: 16px;
-  border-bottom: 1px solid var(--border);
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--glass-border);
   display: flex;
   align-items: center;
   gap: 12px;
 }
 .brand-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background-color: var(--accent);
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #5865f2 0%, #4752c4 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-weight: bold;
+  font-weight: 800;
+  font-size: 16px;
+  box-shadow: 0 4px 14px var(--accent-glow);
 }
-.brand-title { font-size: 16px; font-weight: bold; color: var(--text-header); }
-.brand-sub { font-size: 12px; color: var(--text-muted); }
+.brand-title { font-size: 16px; font-weight: 800; color: var(--text-header); letter-spacing: -0.2px; }
+.brand-sub { font-size: 11.5px; color: var(--text-muted); font-weight: 500; }
 .sidebar-controls {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--glass-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 13px;
+  font-size: 12.5px;
+  background: rgba(0, 0, 0, 0.15);
 }
 .run-list {
   flex: 1;
   overflow-y: auto;
   padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .run-card {
-  background-color: var(--bg-card);
-  border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 12px;
-  margin-bottom: 8px;
+  background: var(--glass-card);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 14px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.18s ease;
+  position: relative;
 }
 .run-card:hover {
-  background-color: var(--bg-card-hover);
-  border-color: var(--border);
+  background: var(--glass-card-hover);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
 }
 .run-card.active {
   border-color: var(--accent);
-  background-color: rgba(88, 101, 242, 0.1);
+  background: rgba(88, 101, 242, 0.16);
+  box-shadow: 0 4px 18px var(--accent-glow);
 }
 .run-card-title {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-header);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 .run-card-meta {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-muted);
   display: flex;
   justify-content: space-between;
   margin-top: 4px;
 }
 
-/* Main Content */
+/* Main Area */
 .main {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-main);
   overflow-y: auto;
+  position: relative;
 }
 .topbar {
-  background-color: var(--bg-sidebar);
-  border-bottom: 1px solid var(--border);
-  padding: 16px 24px;
+  background: rgba(20, 21, 26, 0.65);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--glass-border);
+  padding: 14px 28px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
-.target-summary {
+.content-area {
+  padding: 24px 28px;
+  flex: 1;
+}
+
+/* Discord Profile Banner & Hero */
+.discord-profile-card {
+  background: var(--glass-card);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+.profile-banner {
+  height: 115px;
+  background: linear-gradient(135deg, #5865f2 0%, #2b3b75 40%, #171c2f 100%);
+  position: relative;
+}
+.profile-body {
+  padding: 0 24px 20px 24px;
+  position: relative;
+}
+.avatar-row {
   display: flex;
-  align-items: center;
-  gap: 16px;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: -45px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 14px;
 }
-.target-avatar {
-  width: 52px;
-  height: 52px;
+.avatar-wrapper {
+  position: relative;
+  width: 90px;
+  height: 90px;
+}
+.discord-avatar {
+  width: 90px;
+  height: 90px;
   border-radius: 50%;
+  border: 5px solid #16171b;
   background-color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
-  font-weight: bold;
-  color: #fff;
+  font-size: 34px;
+  font-weight: 700;
+  color: #ffffff;
   overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
 }
-.target-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.target-name { font-size: 18px; font-weight: bold; color: var(--text-header); }
-.target-sub { font-size: 13px; color: var(--text-muted); }
-
-.content-area {
-  padding: 24px;
-  flex: 1;
+.discord-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.presence-badge {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 3.5px solid #16171b;
+  background-color: var(--status-green);
+  box-shadow: 0 0 8px var(--status-green-glow);
+}
+.target-title-block {
+  margin-bottom: 14px;
+}
+.target-display-name {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-header);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.target-handle {
+  font-size: 14.5px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-top: 2px;
+}
+.chips-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.discord-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: rgba(88, 101, 242, 0.12);
+  border: 1px solid rgba(88, 101, 242, 0.25);
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #b5bac1;
+}
+.discord-chip.active {
+  background: rgba(88, 101, 242, 0.22);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+.profile-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--glass-border);
+}
+.meta-item {
+  background: var(--glass-inner);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+}
+.meta-item-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+}
+.meta-item-value {
+  font-size: 12.5px;
+  color: var(--text-header);
+  font-family: monospace;
+  word-break: break-all;
 }
 
 /* KPI Cards */
 .kpi-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px;
   margin-bottom: 24px;
 }
 .kpi-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  background: var(--glass-card);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
   padding: 16px;
   text-align: center;
+  transition: all 0.18s ease;
+  position: relative;
+  overflow: hidden;
 }
-.kpi-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
-.kpi-num { font-size: 28px; font-weight: bold; color: var(--text-header); margin-top: 6px; }
+.kpi-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--glass-border-hover);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+.kpi-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.kpi-num {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text-header);
+  line-height: 1.1;
+}
 
 /* Tabs */
 .tabs {
   display: flex;
-  gap: 8px;
-  border-bottom: 1px solid var(--border);
+  gap: 10px;
+  border-bottom: 1px solid var(--glass-border);
   margin-bottom: 20px;
 }
 .tab-btn {
   background: none;
   border: none;
   padding: 10px 18px;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 700;
   color: var(--text-muted);
   cursor: pointer;
   border-bottom: 2px solid transparent;
-  transition: all 0.2s ease;
+  transition: all 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .tab-btn.active {
   color: var(--text-header);
@@ -194,76 +363,243 @@ body {
 
 /* Badges */
 .badge {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 6px;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
-.badge-confirmed { background-color: rgba(35, 165, 90, 0.2); color: var(--status-green); border: 1px solid var(--status-green); }
-.badge-candidate { background-color: rgba(240, 178, 50, 0.2); color: var(--status-yellow); border: 1px solid var(--status-yellow); }
-.badge-notfound { background-color: rgba(128, 132, 142, 0.2); color: var(--status-gray); border: 1px solid var(--status-gray); }
-.badge-blocked { background-color: rgba(242, 63, 67, 0.2); color: var(--status-red); border: 1px solid var(--status-red); }
-.badge-complete { background-color: rgba(35, 165, 90, 0.2); color: var(--status-green); }
-.badge-running { background-color: rgba(88, 101, 242, 0.2); color: var(--accent); }
+.badge-confirmed {
+  background: rgba(87, 242, 135, 0.15);
+  color: var(--status-green);
+  border: 1px solid rgba(87, 242, 135, 0.35);
+  box-shadow: 0 0 10px var(--status-green-glow);
+}
+.badge-candidate {
+  background: rgba(254, 231, 92, 0.15);
+  color: var(--status-yellow);
+  border: 1px solid rgba(254, 231, 92, 0.35);
+  box-shadow: 0 0 10px var(--status-yellow-glow);
+}
+.badge-notfound {
+  background: rgba(148, 155, 164, 0.15);
+  color: var(--status-gray);
+  border: 1px solid rgba(148, 155, 164, 0.25);
+}
+.badge-blocked {
+  background: rgba(237, 66, 69, 0.15);
+  color: var(--status-red);
+  border: 1px solid rgba(237, 66, 69, 0.35);
+  box-shadow: 0 0 10px var(--status-red-glow);
+}
+.badge-complete {
+  background: rgba(87, 242, 135, 0.15);
+  color: var(--status-green);
+  border: 1px solid rgba(87, 242, 135, 0.3);
+}
+.badge-running {
+  background: rgba(88, 101, 242, 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(88, 101, 242, 0.3);
+}
 
-/* Tables */
+/* Glass Panels & Tables */
 .table-container {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  background: var(--glass-card);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.38);
   overflow: hidden;
 }
-table { width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; }
-th, td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
-th { background-color: rgba(0, 0, 0, 0.2); color: var(--text-muted); font-size: 12px; text-transform: uppercase; }
-tr:hover td { background-color: rgba(255, 255, 255, 0.02); }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  text-align: left;
+}
+th, td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--glass-border);
+}
+th {
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(255, 255, 255, 0.02); }
 
 /* Buttons */
 .btn {
-  background-color: var(--accent);
+  background: var(--accent);
   color: white;
   border: none;
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: background-color 0.15s ease;
+  transition: all 0.18s ease;
+  box-shadow: 0 4px 14px var(--accent-glow);
 }
-.btn:hover { background-color: var(--accent-hover); }
+.btn:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
 .btn-secondary {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border);
+  background: var(--glass-card);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
   color: var(--text-normal);
+  box-shadow: none;
 }
-.btn-secondary:hover { background-color: var(--bg-card-hover); }
+.btn-secondary:hover {
+  background: var(--glass-card-hover);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--text-header);
+}
 
-/* Cards list */
+/* Cards & Lists */
 .card-item {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
+  background: var(--glass-card);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
   margin-bottom: 12px;
+  transition: all 0.18s ease;
+}
+.card-item:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: var(--glass-card-hover);
 }
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .code-box {
-  background-color: var(--bg-darkest);
+  background: var(--code-bg);
+  border: 1px solid var(--glass-border);
   border-radius: 4px;
-  padding: 2px 6px;
+  padding: 2px 7px;
   font-family: monospace;
   font-size: 12px;
+  color: #c9cdfb;
+}
+.role-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  color: #dbdee1;
+}
+.role-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Discord Messages Stream */
+.discord-msg-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.discord-msg {
+  display: flex;
+  gap: 16px;
+  background: var(--glass-card);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  transition: all 0.18s ease;
+}
+.discord-msg:hover {
+  background: var(--glass-card-hover);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.msg-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #ffffff;
+  font-size: 16px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.msg-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.msg-body {
+  flex: 1;
+  min-width: 0;
+}
+.msg-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.msg-author {
+  font-weight: 700;
+  color: var(--text-header);
+  font-size: 14.5px;
+}
+.msg-chan-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(88, 101, 242, 0.15);
+  color: #a3a9b7;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: monospace;
+}
+.msg-timestamp {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.msg-text {
+  color: var(--text-normal);
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .empty-state {
@@ -285,10 +621,10 @@ tr:hover td { background-color: rgba(255, 255, 255, 0.02); }
     </div>
   </div>
   <div class="sidebar-controls">
-    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-muted);">
       <input type="checkbox" id="autoRefreshToggle" checked> Auto-refresh (3s)
     </label>
-    <button class="btn btn-secondary" onclick="fetchRuns()" style="padding: 4px 8px; font-size: 12px;">Refresh</button>
+    <button class="btn btn-secondary" onclick="fetchRuns()" style="padding: 4px 10px; font-size: 11.5px;">Refresh</button>
   </div>
   <div class="run-list" id="runList">
     <div class="empty-state">Loading runs...</div>
@@ -298,50 +634,91 @@ tr:hover td { background-color: rgba(255, 255, 255, 0.02); }
 <!-- Main Investigation Area -->
 <main class="main" id="mainView">
   <div class="topbar">
-    <div class="target-summary">
-      <div class="target-avatar" id="targetAvatar">?</div>
-      <div>
-        <div class="target-name" id="targetName">Select a search run</div>
-        <div class="target-sub" id="targetDetails">Target User ID &bull; Tag &bull; Run Date</div>
-      </div>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <span style="font-size: 14px; font-weight: 700; color: var(--text-header);" id="topbarRunTitle">Active Search Session</span>
+      <span id="topbarRunStatus"></span>
     </div>
     <div style="display: flex; gap: 10px;">
       <a href="#" id="viewReportBtn" target="_blank" class="btn btn-secondary" style="display: none;">
-        <span>📄</span> View Report.html
+        <span>📄</span> View Standalone Report
       </a>
     </div>
   </div>
 
   <div class="content-area" id="contentArea" style="display: none;">
+    <!-- Discord Profile Hero Card -->
+    <div class="discord-profile-card">
+      <div class="profile-banner"></div>
+      <div class="profile-body">
+        <div class="avatar-row">
+          <div class="avatar-wrapper">
+            <div class="discord-avatar" id="targetAvatarBox">
+              <img id="targetAvatarImg" src="https://cdn.discordapp.com/embed/avatars/0.png" alt="Avatar">
+            </div>
+            <div class="presence-badge" title="Target Active Status"></div>
+          </div>
+          <div class="chips-row">
+            <span class="discord-chip active">🛡️ TARGET IDENTITY</span>
+            <span class="discord-chip" id="targetSourceChip">SOURCE: RESOLVED</span>
+            <span class="discord-chip" id="targetRunChip">RUN: ID</span>
+          </div>
+        </div>
+
+        <div class="target-title-block">
+          <div class="target-display-name" id="targetDisplayName">Target</div>
+          <div class="target-handle" id="targetHandle">@target</div>
+        </div>
+
+        <div class="profile-meta-grid">
+          <div class="meta-item">
+            <div class="meta-item-label">Target Snowflake ID</div>
+            <div class="meta-item-value" id="targetSnowflakeId">-</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-item-label">Account Created</div>
+            <div class="meta-item-value" id="targetAccountCreated">-</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-item-label">Category Tag / Scope</div>
+            <div class="meta-item-value" id="targetTag">-</div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-item-label">Verification Provenance</div>
+            <div class="meta-item-value" id="targetVerifiedDate">-</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- KPI Row -->
     <div class="kpi-row">
       <div class="kpi-card">
         <div class="kpi-title">Servers Examined</div>
         <div class="kpi-num" id="kpiServers">0</div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-title">Confirmed Matches</div>
+      <div class="kpi-card" style="box-shadow: 0 4px 18px var(--status-green-glow);">
+        <div class="kpi-title" style="color: var(--status-green);">Confirmed Matches</div>
         <div class="kpi-num" id="kpiConfirmed" style="color: var(--status-green);">0</div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-title">Candidate Matches</div>
+      <div class="kpi-card" style="box-shadow: 0 4px 18px var(--status-yellow-glow);">
+        <div class="kpi-title" style="color: var(--status-yellow);">Candidate Matches</div>
         <div class="kpi-num" id="kpiCandidates" style="color: var(--status-yellow);">0</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-title">Absence Verified</div>
         <div class="kpi-num" id="kpiNotFound">0</div>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-title">Gated / Blocked</div>
+      <div class="kpi-card" style="box-shadow: 0 4px 18px var(--status-red-glow);">
+        <div class="kpi-title" style="color: var(--status-red);">Gated / Blocked</div>
         <div class="kpi-num" id="kpiBlocked" style="color: var(--status-red);">0</div>
       </div>
     </div>
 
     <!-- Navigation Tabs -->
     <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab('servers')">Scanned Servers (<span id="countServersTab">0</span>)</button>
-      <button class="tab-btn" onclick="switchTab('matches')">Identity Matches (<span id="countMatchesTab">0</span>)</button>
-      <button class="tab-btn" onclick="switchTab('messages')">Evidence Messages (<span id="countMessagesTab">0</span>)</button>
+      <button class="tab-btn active" id="tabBtnServers" onclick="switchTab('servers')">Scanned Servers (<span id="countServersTab">0</span>)</button>
+      <button class="tab-btn" id="tabBtnMatches" onclick="switchTab('matches')">Identity Matches (<span id="countMatchesTab">0</span>)</button>
+      <button class="tab-btn" id="tabBtnMessages" onclick="switchTab('messages')">Evidence Messages (<span id="countMessagesTab">0</span>)</button>
     </div>
 
     <!-- Tab 1: Servers -->
@@ -351,7 +728,7 @@ tr:hover td { background-color: rgba(255, 255, 255, 0.02); }
           <thead>
             <tr>
               <th>Server Name</th>
-              <th>Invite</th>
+              <th>Invite Code</th>
               <th>Scan Status</th>
               <th>Match Status</th>
               <th>Reason</th>
@@ -375,8 +752,9 @@ tr:hover td { background-color: rgba(255, 255, 255, 0.02); }
   </div>
 
   <div id="noRunSelected" class="empty-state" style="margin: auto;">
-    <h2>Select an OSINT run from the sidebar to view findings</h2>
-    <p style="margin-top: 8px;">Real-time progress, server scans, and evidence will appear here.</p>
+    <div style="font-size: 42px; margin-bottom: 12px;">🛡️</div>
+    <h2 style="color: var(--text-header); font-size: 20px;">Select an OSINT run from the sidebar</h2>
+    <p style="margin-top: 8px; font-size: 13.5px; color: var(--text-muted);">Real-time progress, server scans, and evidence will appear here.</p>
   </div>
 </main>
 
@@ -384,6 +762,29 @@ tr:hover td { background-color: rgba(255, 255, 255, 0.02); }
 let currentRunId = null;
 let runsData = [];
 let activeRunDetails = null;
+
+function snowflakeToDate(snowflake) {
+  if (!snowflake || !/^\d+$/.test(snowflake)) return null;
+  try {
+    const id = BigInt(snowflake);
+    const ms = Number((id >> 22n) + 1420070400000n);
+    return new Date(ms);
+  } catch (e) {
+    return null;
+  }
+}
+
+function getDiscordAvatar(avatarUrl, userId, username) {
+  if (avatarUrl && avatarUrl.trim() !== '') return avatarUrl;
+  if (userId && /^\d+$/.test(userId)) {
+    try {
+      const id = BigInt(userId);
+      const index = Number((id >> 22n) % 6n);
+      return `https://cdn.discordapp.com/embed/avatars/${Math.abs(index)}.png`;
+    } catch (e) {}
+  }
+  return 'https://cdn.discordapp.com/embed/avatars/0.png';
+}
 
 async function fetchRuns() {
   try {
@@ -458,17 +859,32 @@ function renderRunDetails(data) {
   document.getElementById('noRunSelected').style.display = 'none';
   document.getElementById('contentArea').style.display = 'block';
 
-  // Target header
-  document.getElementById('targetName').textContent = run.target_username || 'Target';
-  const targetSub = `User ID: ${run.target_user_id || 'N/A'} | Tag: ${run.tag} | Status: ${run.status} | Verified: ${formatDate(run.target_verified_at)}`;
-  document.getElementById('targetDetails').textContent = targetSub;
+  // Topbar
+  document.getElementById('topbarRunTitle').textContent = `Target: ${run.target_username || run.run_id}`;
+  const statusBadge = run.status === 'complete' ? 'badge-complete' : (run.status === 'running' ? 'badge-running' : 'badge-blocked');
+  document.getElementById('topbarRunStatus').innerHTML = `<span class="badge ${statusBadge}">${escapeHtml(run.status || 'unknown')}</span>`;
 
-  const avatarBox = document.getElementById('targetAvatar');
-  if (run.target_avatar_url) {
-    avatarBox.innerHTML = `<img src="${escapeHtml(run.target_avatar_url)}" alt="Avatar">`;
-  } else {
-    avatarBox.textContent = (run.target_username || 'U').charAt(0).toUpperCase();
+  // Profile Card
+  const displayName = run.target_display_name || run.target_username || 'Target Profile';
+  document.getElementById('targetDisplayName').textContent = displayName;
+  document.getElementById('targetHandle').textContent = `@${run.target_username || 'target'}`;
+  document.getElementById('targetSourceChip').textContent = `SOURCE: ${run.target_resolution_source || 'OPERATOR'}`;
+  document.getElementById('targetRunChip').textContent = `RUN: ${run.run_id}`;
+
+  const avatarUrl = getDiscordAvatar(run.target_avatar_url, run.target_user_id, run.target_username);
+  const avatarImg = document.getElementById('targetAvatarImg');
+  avatarImg.src = avatarUrl;
+  avatarImg.onerror = () => { avatarImg.src = 'https://cdn.discordapp.com/embed/avatars/0.png'; };
+
+  document.getElementById('targetSnowflakeId').textContent = run.target_user_id || 'Username-Only';
+  let createdStr = 'N/A';
+  if (run.target_user_id) {
+    const d = snowflakeToDate(run.target_user_id);
+    if (d) createdStr = d.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
   }
+  document.getElementById('targetAccountCreated').textContent = createdStr;
+  document.getElementById('targetTag').textContent = run.tag || 'general';
+  document.getElementById('targetVerifiedDate').textContent = run.target_verified_at ? formatDate(run.target_verified_at) : 'N/A';
 
   // Report button
   const reportBtn = document.getElementById('viewReportBtn');
@@ -498,7 +914,7 @@ function renderRunDetails(data) {
   // Render Servers table
   const tbody = document.getElementById('serversTbody');
   if (scans.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No server scans recorded.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">No server scans recorded.</td></tr>';
   } else {
     tbody.innerHTML = scans.map(s => {
       let badgeClass = 'badge-notfound';
@@ -522,29 +938,41 @@ function renderRunDetails(data) {
   // Render Matches
   const matchesBox = document.getElementById('matchesContainer');
   if (obs.length === 0) {
-    matchesBox.innerHTML = '<div class="empty-state">No identity matches observed.</div>';
+    matchesBox.innerHTML = '<div class="empty-state">No target identity matches observed in the scanned servers.</div>';
   } else {
     matchesBox.innerHTML = obs.map(o => {
       const badgeClass = o.match_status === 'confirmed' ? 'badge-confirmed' : 'badge-candidate';
-      const roles = (o.observed_roles || []).join(', ') || 'None';
+      const roles = (o.observed_roles || []);
+      const rolesHtml = roles.length > 0
+        ? `<div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;">
+             <span style="font-size: 11.5px; color: var(--text-muted);">Roles:</span>
+             ${roles.map(r => `<span class="role-pill"><span class="role-dot"></span>${escapeHtml(r)}</span>`).join('')}
+           </div>`
+        : '';
+
       return `
         <div class="card-item">
           <div class="card-header">
-            <div><strong>${escapeHtml(o.observed_username)}</strong> (Guild ID: <span class="code-box">${escapeHtml(o.guild_id)}</span>)</div>
+            <div>
+              <strong style="color: var(--text-header); font-size: 15px;">@${escapeHtml(o.observed_username)}</strong>
+              <span style="color: var(--text-muted); margin: 0 4px;">&bull;</span>
+              <span style="font-size: 13px; color: var(--text-muted);">Guild ID: <span class="code-box">${escapeHtml(o.guild_id)}</span></span>
+            </div>
             <span class="badge ${badgeClass}">${escapeHtml(o.match_status)}</span>
           </div>
           <div class="run-card-meta">
-            <span>Observed User ID: <span class="code-box">${escapeHtml(o.observed_user_id)}</span></span>
-            <span>Nick: ${escapeHtml(o.observed_nick || '-')}</span>
+            <span>Observed Snowflake: <span class="code-box">${escapeHtml(o.observed_user_id)}</span></span>
+            <span>Server Nick: <strong>${escapeHtml(o.observed_nick || '-')}</strong></span>
           </div>
-          <div class="run-card-meta" style="margin-top: 4px;">
-            <span>Joined: ${escapeHtml(o.observed_joined_at || '-')}</span>
-            <span>Roles: ${escapeHtml(roles)}</span>
+          <div class="run-card-meta" style="margin-top: 6px;">
+            <span>Joined Guild: ${escapeHtml(o.observed_joined_at || 'Unknown')}</span>
+            <span>Acquisition: <span class="code-box">${escapeHtml(o.acquisition_method)}</span></span>
           </div>
-          <div class="run-card-meta" style="margin-top: 4px;">
-            <span>Reason: ${escapeHtml(o.match_reason)}</span>
-            <span>Method: ${escapeHtml(o.acquisition_method)}</span>
+          <div class="run-card-meta" style="margin-top: 6px;">
+            <span>Match Reason: <span class="code-box">${escapeHtml(o.match_reason)}</span></span>
+            <span>Captured: ${formatDate(o.observed_at)}</span>
           </div>
+          ${rolesHtml}
         </div>
       `;
     }).join('');
@@ -553,21 +981,33 @@ function renderRunDetails(data) {
   // Render Messages
   const msgsBox = document.getElementById('messagesContainer');
   if (msgs.length === 0) {
-    msgsBox.innerHTML = '<div class="empty-state">No messages captured.</div>';
+    msgsBox.innerHTML = '<div class="empty-state">No message records captured during this run.</div>';
   } else {
-    msgsBox.innerHTML = msgs.map(m => `
-      <div class="card-item" style="border-left: 4px solid var(--accent);">
-        <div class="card-header">
-          <div><strong>${escapeHtml(m.author_username)}</strong> (Author ID: <span class="code-box">${escapeHtml(m.author_id)}</span>)</div>
-          <span style="font-size: 12px; color: var(--text-muted);">${formatDate(m.timestamp)}</span>
-        </div>
-        <div style="font-size: 14px; margin-top: 6px; white-space: pre-wrap;">${escapeHtml(m.content)}</div>
-        <div class="run-card-meta" style="margin-top: 6px;">
-          <span>Channel: <span class="code-box">${escapeHtml(m.channel_id)}</span></span>
-          <span>Method: ${escapeHtml(m.acquisition_method)}</span>
-        </div>
+    msgsBox.innerHTML = `
+      <div class="discord-msg-stream">
+        ${msgs.map(m => {
+          const msgAvatar = getDiscordAvatar(null, m.author_id, m.author_username);
+          return `
+            <div class="discord-msg">
+              <div class="msg-avatar">
+                <img src="${msgAvatar}" alt="Avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+              </div>
+              <div class="msg-body">
+                <div class="msg-meta-row">
+                  <span class="msg-author">${escapeHtml(m.author_username)}</span>
+                  <span class="msg-chan-pill">#${escapeHtml(m.channel_id)}</span>
+                  <span class="msg-timestamp">${formatDate(m.timestamp)}</span>
+                </div>
+                <div class="msg-text">${escapeHtml(m.content)}</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 6px;">
+                  Message ID: <span class="code-box">${escapeHtml(m.message_id || '-')}</span> &bull; Method: ${escapeHtml(m.acquisition_method || 'search')}
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
       </div>
-    `).join('');
+    `;
   }
 }
 
@@ -576,13 +1016,13 @@ function switchTab(tabName) {
   document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
 
   if (tabName === 'servers') {
-    event.target.classList.add('active');
+    document.getElementById('tabBtnServers').classList.add('active');
     document.getElementById('tabServers').style.display = 'block';
   } else if (tabName === 'matches') {
-    event.target.classList.add('active');
+    document.getElementById('tabBtnMatches').classList.add('active');
     document.getElementById('tabMatches').style.display = 'block';
   } else if (tabName === 'messages') {
-    event.target.classList.add('active');
+    document.getElementById('tabBtnMessages').classList.add('active');
     document.getElementById('tabMessages').style.display = 'block';
   }
 }
@@ -590,7 +1030,7 @@ function switchTab(tabName) {
 function formatDate(dateStr) {
   if (!dateStr) return '';
   const d = new Date(dateStr);
-  return isNaN(d.getTime()) ? dateStr : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return isNaN(d.getTime()) ? dateStr : d.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
 }
 
 function escapeHtml(str) {
@@ -603,7 +1043,7 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-// Initial load
+// Initial fetch
 fetchRuns();
 
 // Auto refresh interval (3 seconds)

@@ -46,6 +46,7 @@ func TestBridge_HTTPPostSubmit(t *testing.T) {
 	ch := Challenge{
 		Service:   "hcaptcha",
 		SiteKey:   "test-sitekey-123",
+		SessionID: "session-id-456",
 		RqData:    "test-rqdata-456",
 		GuildID:   "guild_999",
 		GuildName: "Test Guild",
@@ -120,6 +121,9 @@ func TestBridge_HTTPPostSubmit(t *testing.T) {
 		}
 		if res.sol.RqToken != "rq-token-789" {
 			t.Errorf("expected rqtoken preserved, got %s", res.sol.RqToken)
+		}
+		if res.sol.SessionID != "session-id-456" {
+			t.Errorf("expected sessionID preserved, got %s", res.sol.SessionID)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatalf("timed out waiting for solve result")

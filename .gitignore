@@ -6,6 +6,8 @@ bin/
 dist/
 *.sqlite
 *.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
 *.log
 exports_*
 **/exports_*

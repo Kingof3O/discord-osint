@@ -337,53 +337,93 @@ func (e *Engine) processServer(
 		scan.GuildName = meta.Guild.Name
 	}
 
-	// 2. Join Guild with CAPTCHA Handling
-	var captchaToken, captchaRqToken string
+	// 2. Check if burner is already a member, or join with CAPTCHA Handling
 	var joined bool
-	for attempt := 0; attempt < 3; attempt++ {
-		joinResp, joinErr := e.discordClient.JoinGuild(ctx, srv.InviteCode, captchaToken, captchaRqToken)
-		if joinErr != nil {
-			var capErr *discord.CaptchaChallengeError
-			if errors.As(joinErr, &capErr) {
-				if e.captchaSolver == nil {
-					scan.ScanStatus = "blocked"
-					scan.MemberStopReason = "captcha_required_no_solver"
-					scan.CompletedAt = time.Now().UTC()
-					_ = e.store.RecordGuildScanTransaction(ctx, scan, nil, nil)
-					return
-				}
+	var alreadyMember bool
+	if scan.GuildID != "" {
+		if isMember, err := e.discordClient.IsGuildMember(ctx, scan.GuildID); err == nil && isMember {
+			joined = true
+			alreadyMember = true
+			fmt.Fprintf(e.writer, "[+] Burner account is already a member of %s (ID: %s); skipping join\n", scan.GuildName, scan.GuildID)
+		}
+	}
 
-				fmt.Fprintf(e.writer, "[!] CAPTCHA required for %s. Opening interactive solver...\n", scan.GuildName)
-				sol, err := e.captchaSolver.Solve(ctx, capErr.Challenge)
-				if err != nil {
-					e.logger.Warn("CAPTCHA solving failed or skipped", zap.Error(err))
-					scan.ScanStatus = "blocked"
-					scan.MemberStopReason = "captcha_unsolved"
-					scan.CompletedAt = time.Now().UTC()
-					_ = e.store.RecordGuildScanTransaction(ctx, scan, nil, nil)
-					return
-				}
-				captchaToken = sol.Token
-				captchaRqToken = sol.RqToken
-				continue // retry join with token
+	var captchaToken, captchaRqToken, captchaSessionID string
+	if !joined {
+		for attempt := 0; attempt < 3; attempt++ {
+			var gwSessionID string
+			if e.gateway != nil {
+				gwSessionID = e.gateway.SessionID()
 			}
 
-			// Other join error
-			fmt.Fprintf(e.writer, "[-] Failed to join %s: %v\n", scan.GuildName, joinErr)
-			scan.ScanStatus = "blocked"
-			scan.MemberStopReason = "join_failed"
-			scan.CompletedAt = time.Now().UTC()
-			_ = e.store.RecordGuildScanTransaction(ctx, scan, nil, nil)
-			return
-		}
+			joinResp, joinErr := e.discordClient.JoinGuild(ctx, srv.InviteCode, gwSessionID, captchaToken, captchaRqToken, captchaSessionID)
+			if joinErr != nil {
+				var capErr *discord.CaptchaChallengeError
+				if errors.As(joinErr, &capErr) {
+					if e.captchaSolver == nil {
+						scan.ScanStatus = "blocked"
+						scan.MemberStopReason = "captcha_required_no_solver"
+						scan.CompletedAt = time.Now().UTC()
+						_ = e.store.RecordGuildScanTransaction(ctx, scan, nil, nil)
+						return
+					}
 
-		if joinResp != nil && joinResp.Guild != nil {
-			scan.GuildID = joinResp.Guild.ID
-			scan.GuildName = joinResp.Guild.Name
-			joined = true
-			fmt.Fprintf(e.writer, "[+] Successfully joined guild: %s (ID: %s)\n", scan.GuildName, scan.GuildID)
+					if attempt > 0 {
+						fmt.Fprintf(e.writer, "[!] Discord rejected previous CAPTCHA token (attempt %d/3).\n", attempt)
+						if len(capErr.Challenge.Errors) > 0 {
+							fmt.Fprintf(e.writer, "    Discord error message: %s\n", strings.Join(capErr.Challenge.Errors, ", "))
+						}
+						e.logger.Warn("Discord rejected CAPTCHA retry",
+							zap.Int("attempt", attempt+1),
+							zap.String("server", scan.GuildName),
+							zap.Strings("discord_errors", capErr.Challenge.Errors),
+							zap.String("raw", capErr.RawResponse),
+						)
+					}
+
+					fmt.Fprintf(e.writer, "[!] CAPTCHA required for %s. Opening interactive solver...\n", scan.GuildName)
+					sol, err := e.captchaSolver.Solve(ctx, capErr.Challenge)
+					if err != nil {
+						e.logger.Warn("CAPTCHA solving failed or skipped", zap.Error(err))
+						scan.ScanStatus = "blocked"
+						scan.MemberStopReason = "captcha_unsolved"
+						scan.CompletedAt = time.Now().UTC()
+						_ = e.store.RecordGuildScanTransaction(ctx, scan, nil, nil)
+						return
+					}
+					captchaToken = sol.Token
+					if sol.RqToken != "" {
+						captchaRqToken = sol.RqToken
+					} else {
+						captchaRqToken = capErr.Challenge.RqToken
+					}
+					if sol.SessionID != "" {
+						captchaSessionID = sol.SessionID
+					} else {
+						captchaSessionID = capErr.Challenge.SessionID
+					}
+					continue // retry join with token
+				}
+
+				// Other join error
+				fmt.Fprintf(e.writer, "[-] Failed to join %s: %v\n", scan.GuildName, joinErr)
+				scan.ScanStatus = "blocked"
+				scan.MemberStopReason = "join_failed"
+				scan.CompletedAt = time.Now().UTC()
+				_ = e.store.RecordGuildScanTransaction(ctx, scan, nil, nil)
+				return
+			}
+
+			if joinResp != nil {
+				if joinResp.Guild != nil {
+					scan.GuildID = joinResp.Guild.ID
+					scan.GuildName = joinResp.Guild.Name
+				}
+				joined = true
+				fmt.Fprintf(e.writer, "[+] Successfully joined guild: %s (ID: %s)\n", scan.GuildName, scan.GuildID)
+			}
+			break
 		}
-		break
 	}
 
 	if !joined {
@@ -403,7 +443,7 @@ func (e *Engine) processServer(
 	}
 
 	defer func() {
-		if !stayAfterHit && scan.GuildID != "" {
+		if !stayAfterHit && !alreadyMember && scan.GuildID != "" {
 			_ = e.discordClient.LeaveGuild(ctx, scan.GuildID)
 		}
 	}()
@@ -433,11 +473,17 @@ func (e *Engine) processServer(
 				scan.BestMatchReason = string(obs.MatchReason)
 				scan.BestObservedUserID = obs.ObservedUserID
 				scan.BestObservedUsername = obs.ObservedUsername
+				if obs.ObservedGuildAvatarURL != "" {
+					_ = e.store.UpdateRunTargetProfile(ctx, runID, obs.ObservedGuildAvatarURL, gm.DisplayName)
+				}
 			} else if obs.MatchStatus == matcher.MatchCandidate && scan.BestMatchStatus != "confirmed" {
 				scan.BestMatchStatus = "candidate"
 				scan.BestMatchReason = string(obs.MatchReason)
 				scan.BestObservedUserID = obs.ObservedUserID
 				scan.BestObservedUsername = obs.ObservedUsername
+				if obs.ObservedGuildAvatarURL != "" {
+					_ = e.store.UpdateRunTargetProfile(ctx, runID, obs.ObservedGuildAvatarURL, gm.DisplayName)
+				}
 			}
 		}
 	}
@@ -458,6 +504,15 @@ func (e *Engine) processServer(
 		collectedMsgs, err := e.discordClient.SearchGuildMessages(ctx, scan.GuildID, targetID, "")
 		if err == nil && len(collectedMsgs) > 0 {
 			for _, m := range collectedMsgs {
+				if m.Author.ID == targetID && m.Author.Avatar != "" {
+					ext := "png"
+					if strings.HasPrefix(m.Author.Avatar, "a_") {
+						ext = "gif"
+					}
+					avatarURL := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.%s?size=256", m.Author.ID, m.Author.Avatar, ext)
+					_ = e.store.UpdateRunTargetProfile(ctx, runID, avatarURL, m.Author.GlobalName)
+				}
+
 				messages = append(messages, store.MessageRecord{
 					RunID:             runID,
 					GuildID:           scan.GuildID,
@@ -486,6 +541,29 @@ func (e *Engine) processServer(
 				}
 				fmt.Fprintf(e.writer, "[+] MATCH CONFIRMED via message evidence in %s: %d messages collected (Author: %s)\n",
 					scan.GuildName, len(messages), scan.BestObservedUsername)
+			}
+		}
+
+		// Direct probe for member profile (authoritative avatar and roles)
+		if scan.BestMatchStatus == "confirmed" {
+			if mem, err := e.discordClient.GetGuildMember(ctx, scan.GuildID, targetID); err == nil && mem != nil {
+				avatarURL := ""
+				if mem.Avatar != "" {
+					ext := "png"
+					if strings.HasPrefix(mem.Avatar, "a_") {
+						ext = "gif"
+					}
+					avatarURL = fmt.Sprintf("https://cdn.discordapp.com/guilds/%s/users/%s/avatars/%s.%s?size=256", scan.GuildID, mem.User.ID, mem.Avatar, ext)
+				} else if mem.User.Avatar != "" {
+					ext := "png"
+					if strings.HasPrefix(mem.User.Avatar, "a_") {
+						ext = "gif"
+					}
+					avatarURL = fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.%s?size=256", mem.User.ID, mem.User.Avatar, ext)
+				}
+				if avatarURL != "" {
+					_ = e.store.UpdateRunTargetProfile(ctx, runID, avatarURL, mem.User.GlobalName)
+				}
 			}
 		}
 	}

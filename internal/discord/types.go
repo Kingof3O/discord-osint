@@ -98,12 +98,13 @@ type DiscordMessage struct {
 
 // JoinResponse represents the response when joining a guild via invite.
 type JoinResponse struct {
-	Guild               *GuildSummary `json:"guild"`
-	Code                string        `json:"code"`
-	CaptchaKey          []string      `json:"captcha_key,omitempty"`
-	CaptchaSiteKey      string        `json:"captcha_sitekey,omitempty"`
-	CaptchaService      string        `json:"captcha_service,omitempty"`
-	CaptchaRqData       string        `json:"captcha_rqdata,omitempty"`
-	CaptchaRqToken      string        `json:"captcha_rqtoken,omitempty"`
-	Message             string        `json:"message,omitempty"`
+	Guild            *GuildSummary `json:"guild"`
+	Code             string        `json:"code"`
+	CaptchaKey       []string      `json:"captcha_key,omitempty"`
+	CaptchaSiteKey   string        `json:"captcha_sitekey,omitempty"`
+	CaptchaService   string        `json:"captcha_service,omitempty"`
+	CaptchaSessionID string        `json:"captcha_session_id,omitempty"`
+	CaptchaRqData    string        `json:"captcha_rqdata,omitempty"`
+	CaptchaRqToken   string        `json:"captcha_rqtoken,omitempty"`
+	Message          string        `json:"message,omitempty"`
 }
