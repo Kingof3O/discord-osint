@@ -1,9 +1,17 @@
 # Discord OSINT Investigation Platform
 
 [![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go)](https://golang.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Database](https://img.shields.io/badge/Storage-Pure--Go_SQLite-003B57?logo=sqlite)](https://modernc.org/sqlite)
 [![Interface](https://img.shields.io/badge/UI-Glassmorphism_HTML5-5865F2?logo=discord)](https://discord.com)
+[![Security Policy](https://img.shields.io/badge/Security-Policy-green.svg)](SECURITY.md)
+[![OpSec Guide](https://img.shields.io/badge/OpSec-Tradecraft_Guide-red.svg)](docs/opsec.md)
+[![Architecture](https://img.shields.io/badge/Architecture-Specs-blue.svg)](docs/architecture.md)
+[![Contributing](https://img.shields.io/badge/Contributing-Guidelines-orange.svg)](CONTRIBUTING.md)
+
+> [!IMPORTANT]
+> **Authorized Security Research & Threat Intelligence Only**
+> This platform is engineered strictly for authorized incident responders, fraud examiners, cyber threat intelligence (CTI) analysts, and authorized security researchers. Operating this software against servers or accounts without appropriate authorization may violate service agreements or local laws. Review [SECURITY.md](SECURITY.md) and [docs/opsec.md](docs/opsec.md) prior to deployment.
 
 A hardened, production-grade Discord OSINT (Open Source Intelligence) reconnaissance and forensic investigation platform written in Go. Built for cyber threat intelligence (CTI) analysts, incident responders, fraud investigators, and authorized operators to deterministically verify target presence, capture real CDN user avatars, map guild role structures, and harvest verifiable message evidence across public and gated Discord servers.
 
@@ -530,10 +538,14 @@ exports_run_1700000000/
 
 ## Operational Security & Stealth Best Practices
 
-1. **Burner Isolation**: Always use disposable burner Discord accounts. Never use personal or corporate accounts.
-2. **Proxy Chaining**: Route requests through residential proxies or SOCKS5 endpoints via the `PROXY` setting.
-3. **Jitter & Delays**: Maintain `MAX_JOINS_PER_HOUR` at or below 8 with randomized `JOIN_DELAY_SEC` (30-90s) to prevent automated anti-bot flagging.
-4. **Token Scrubbing**: The embedded regex scrubber automatically sanitizes user tokens from terminal outputs, log entries, and database traces.
+For comprehensive tradecraft guidelines, see the dedicated [OpSec & Investigation Tradecraft Guide](docs/opsec.md).
+
+1. **Strict Burner Isolation**: Always operate through disposable, dedicated burner Discord accounts. Never connect personal or organizational accounts. Ensure burner accounts have no linked personal phone numbers, recovery emails, or payment cards.
+2. **Proxy Chaining & Residential IPs**: Route all traffic through rotating residential or SOCKS5 proxies using the `PROXY` configuration (`socks5://user:pass@host:port`). Avoid datacenter subnets (AWS, GCP, DigitalOcean) which are aggressively flagged by Discord and Cloudflare.
+3. **Jitter & Join Pacing**: Maintain `MAX_JOINS_PER_HOUR` at or below **8** with randomized `JOIN_DELAY_SEC` (30-90s) to mirror realistic human browsing patterns and prevent automated anti-bot flag escalation.
+4. **Token Scrubbing & Memory Safety**: The embedded regex scrubber automatically sanitizes user tokens and session credentials from terminal outputs, log entries, and database traces.
+5. **Cryptographic Chain of Custody**: Immediately calculate SHA-256 hashes of generated artifacts (`report.html`, `messages.csv`, `hits.json`) upon scan completion (`shasum -a 256 exports_run_*/* > checksums.sha256`).
+6. **Secure Data Disposal**: Once evidence is transferred to an encrypted forensic vault, sanitize local SQLite databases and export directories (`rm -rf exports_run_* run.sqlite*`).
 
 ---
 
@@ -546,6 +558,16 @@ exports_run_1700000000/
 | `HTTP 429 Too Many Requests` | Rate limit hit on Discord endpoint | Engine honors `Retry-After` header and pauses automatically |
 | `CAPTCHA required` | Guild requires anti-bot join verification | Solve challenge in solver browser window or set `CAPTCHA=skip` |
 | `invalid-input-response` | Captcha token expired before submission | Complete CAPTCHA challenge promptly when browser opens |
+
+---
+
+## Documentation & Compliance
+
+- [Security Policy](SECURITY.md) &mdash; Vulnerability disclosure and sensitive credential handling
+- [OpSec Tradecraft Guide](docs/opsec.md) &mdash; Operational security, proxy chaining, and evidentiary custody
+- [System Architecture](docs/architecture.md) &mdash; Deep technical specifications and concurrency models
+- [Contributing Guidelines](CONTRIBUTING.md) &mdash; Code quality, testing standards, and pull request workflow
+- [MIT License](LICENSE) &mdash; Open source license and terms
 
 ---
 
