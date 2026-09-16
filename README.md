@@ -53,71 +53,70 @@ The platform is designed around modular, decoupled components with strict identi
 
 ```mermaid
 flowchart TB
-    subgraph CLI["Operator Interface & Execution Layer"]
-        CMD["CLI Entrypoint<br/>(Cobra Framework)"]
-        CONF["Configuration Loader<br/>(.env / config.yaml)"]
-        DASH["Embedded Web UI<br/>(discord-osint ui :3000)"]
+    subgraph CLI["Operator Interface and Execution Layer"]
+        CMD["CLI Entrypoint (Cobra Framework)"]
+        CONF["Configuration Loader (.env / config.yaml)"]
+        DASH["Embedded Web UI (discord-osint ui :3000)"]
     end
 
     subgraph PREFLIGHT["Target Verification Preflight"]
-        MATH["Snowflake Math Engine<br/>(Timestamp, Worker, Epoch)"]
-        VAL["Read-Only Validator<br/>(Discord REST Check)"]
+        MATH["Snowflake Math Engine (Timestamp, Worker, Epoch)"]
+        VAL["Read-Only Validator (Discord REST Check)"]
     end
 
     subgraph ENGINE["Workflow Orchestrator"]
-        WALK["Server Walk Engine<br/>(Queue, Limit, Stay)"]
-        JITTER["Rate Limiter & Jitter<br/>(Exponential Backoff / 429)"]
-        STATE["State Checkpointer<br/>(Non-Terminal Resume)"]
+        WALK["Server Walk Engine (Queue, Limit, Stay)"]
+        JITTER["Rate Limiter and Jitter (Exponential Backoff / 429)"]
+        STATE["State Checkpointer (Non-Terminal Resume)"]
     end
 
     subgraph DISCOVERY["Multi-Vector Discovery"]
-        DISBOARD["Disboard Scraper<br/>(Category Tags & Search)"]
-        INVITES["Direct Invites Provider<br/>(Links, Codes, invites.txt)"]
+        DISBOARD["Disboard Scraper (Category Tags and Search)"]
+        INVITES["Direct Invites Provider (Links, Codes, invites.txt)"]
     end
 
-    subgraph ADAPTERS["Discord & Stealth Layer"]
-        PROPS["Super-Properties Spoofing<br/>(Desktop Browser Fingerprint)"]
-        REST["Discord REST Adapter<br/>(Token Scrubber Redaction)"]
-        GW["Gateway Client<br/>(Opcode 14 Lazy Sync)"]
-        GATES["Onboarding & Gate Engine<br/>(Rules, Buttons, Reactions)"]
-        CAPTCHA["CAPTCHA Bridge Server<br/>(127.0.0.1:8765)"]
+    subgraph ADAPTERS["Discord and Stealth Layer"]
+        PROPS["Super-Properties Spoofing (Browser Fingerprint)"]
+        REST["Discord REST Adapter (Token Scrubber Redaction)"]
+        GW["Gateway Client (Opcode 14 Lazy Sync)"]
+        GATES["Onboarding and Gate Engine (Rules, Buttons, Reactions)"]
+        CAPTCHA["CAPTCHA Bridge Server (127.0.0.1:8765)"]
     end
 
-    subgraph STORE["Persistence & Audit Storage"]
-        SQLITE[("Pure-Go SQLite Database<br/>(WAL Mode, Schema v2)")]
+    subgraph STORE["Persistence and Audit Storage"]
+        SQLITE[("Pure-Go SQLite Database (WAL Mode, Schema v2)")]
     end
 
     subgraph EXPORT["Evidence Exporters"]
-        HTML["Glassmorphic HTML Report<br/>(report.html)"]
-        CSV["RFC4180 Messages CSV<br/>(messages.csv)"]
-        MD["Executive Markdown<br/>(report.md)"]
-        JSON["Machine Forensic Hits<br/>(hits.json / observations.json)"]
+        HTML["Glassmorphic HTML Report (report.html)"]
+        CSV["RFC4180 Messages CSV (messages.csv)"]
+        MD["Executive Markdown (report.md)"]
+        JSON["Machine Forensic Hits (hits.json / observations.json)"]
     end
 
     CMD --> CONF
-    CONF --> ENGINE
-    CMD --> PREFLIGHT
-    PREFLIGHT --> MATH
-    PREFLIGHT --> VAL
-    VAL --> WALK
+    CONF --> WALK
+    CMD --> VAL
+    VAL --> MATH
+    MATH --> WALK
 
-    DISCOVERY --> WALK
+    DISBOARD --> WALK
+    INVITES --> WALK
     WALK --> JITTER
-    JITTER --> ADAPTERS
-    ADAPTERS --> CAPTCHA
-    ADAPTERS --> GATES
-    ADAPTERS --> REST
-    ADAPTERS --> GW
+    JITTER --> REST
+    REST --> CAPTCHA
+    REST --> GATES
+    REST --> GW
+    REST --> PROPS
 
-    ADAPTERS --> STATE
+    REST --> STATE
     STATE --> SQLITE
 
-    SQLITE --> EXPORT
+    SQLITE --> HTML
+    SQLITE --> CSV
+    SQLITE --> MD
+    SQLITE --> JSON
     SQLITE --> DASH
-    EXPORT --> HTML
-    EXPORT --> CSV
-    EXPORT --> MD
-    EXPORT --> JSON
 ```
 
 ---
@@ -130,62 +129,62 @@ The sequence diagram below traces the execution path from initial target verific
 sequenceDiagram
     autonumber
     actor Operator
-    participant CLI as CLI / Engine
+    participant CLI as CLI Engine
     participant Disc as Discord REST API
     participant Solv as CAPTCHA Bridge
     participant Gate as Onboarding Engine
     participant DB as SQLite Store
     participant Exp as Report Exporter
 
-    Operator->>CLI: Run search --username "target" --user-id "snowflake"
-    CLI->>Disc: Preflight: Verify target snowflake math & profile
+    Operator->>CLI: Run search with username and snowflake ID
+    CLI->>Disc: Preflight verify target snowflake math and profile
     Disc-->>CLI: Preflight target snapshot
-    CLI->>Operator: Display Preflight Confirmation (Y/n)
+    CLI->>Operator: Display Preflight Confirmation
     Operator->>CLI: Confirm
 
-    CLI->>DB: Atomic CreateRunAtomic(run_id, target_snapshot)
-    CLI->>CLI: Load Disboard tags & direct invites (invites.txt)
+    CLI->>DB: Atomic CreateRunAtomic
+    CLI->>CLI: Load Disboard tags and direct invites
 
     loop For each candidate server in queue
-        CLI->>Disc: GET /invites/{code} (Resolve metadata)
+        CLI->>Disc: GET /invites/:code to resolve metadata
         Disc-->>CLI: Guild name, ID, member count
 
         alt Burner account not in server
-            CLI->>Disc: POST /invites/{code} (Join request)
-            alt CAPTCHA 400 Required
-                Disc-->>CLI: CaptchaChallenge (sitekey, rqdata, session_id)
-                CLI->>Solv: Start HTTP Bridge (:8765) & launch browser
-                Operator->>Solv: Solves hCaptcha challenge in browser
-                Solv-->>CLI: Token callback (g-recaptcha-response)
-                CLI->>Disc: Retry join with captcha_key & session headers
+            CLI->>Disc: POST /invites/:code join request
+            alt CAPTCHA challenge required
+                Disc-->>CLI: Captcha challenge with sitekey and rqdata
+                CLI->>Solv: Start HTTP Bridge (:8765) and launch browser
+                Operator->>Solv: Solves challenge in browser
+                Solv-->>CLI: Return solved token
+                CLI->>Disc: Retry join with captcha key and session headers
                 Disc-->>CLI: HTTP 200 Joined Guild
             end
         end
 
-        CLI->>Gate: HandleRulesScreening (Accept community rules)
-        Gate->>Disc: PUT /guilds/{id}/requests/@me
-        Disc-->>Gate: 204 No Content
+        CLI->>Gate: Handle membership rules screening
+        Gate->>Disc: PUT /guilds/:id/requests/@me
+        Disc-->>Gate: 204 Rules Accepted
 
-        CLI->>Disc: Phase 0: Direct member lookup (GetGuildMember)
-        Disc-->>CLI: Authoritative member object (Avatar hash, global name, roles)
-        CLI->>DB: UpdateRunTargetProfile(avatar_url, global_name)
+        CLI->>Disc: Tier 0 direct member lookup via GetGuildMember
+        Disc-->>CLI: Authoritative member object with avatar hash and roles
+        CLI->>DB: UpdateRunTargetProfile with real avatar and global name
 
-        CLI->>Disc: Phase 1: SearchGuildMembers & SearchGuildMessages
+        CLI->>Disc: Search target messages across guild channels
         Disc-->>CLI: Target messages collected
-        CLI->>Disc: GetGuildChannels(guild_id)
-        Disc-->>CLI: Channel list (resolve channel IDs -> channel names)
+        CLI->>Disc: GetGuildChannels to resolve channel hierarchy
+        Disc-->>CLI: Channel list with human-readable channel names
 
-        CLI->>DB: RecordGuildScanTransaction(scan, observations, messages)
-        CLI->>CLI: Jitter pause (rate limit compliance)
+        CLI->>DB: RecordGuildScanTransaction with scan, observations, messages
+        CLI->>CLI: Jitter pause for rate limit compliance
     end
 
-    CLI->>Exp: ExportArtifacts(run_id)
+    CLI->>Exp: ExportArtifacts for run ID
     Exp->>DB: Query Run, GuildScans, Observations, Messages
-    DB-->>Exp: Full forensic dataset
-    Exp->>Exp: Generate Glassmorphic report.html (with CDN avatar & server/channel pills)
+    DB-->>Exp: Complete forensic dataset
+    Exp->>Exp: Generate Glassmorphic report.html with CDN avatar and pills
     Exp->>Exp: Write messages.csv, hits.json, observations.json, report.md
     Exp-->>CLI: Export completed
-    CLI-->>Operator: Display summary & path to report.html
+    CLI-->>Operator: Display summary and path to report.html
 ```
 
 ---
@@ -196,32 +195,32 @@ To guarantee high coverage while minimizing API footprint, the engine executes a
 
 ```mermaid
 flowchart TD
-    START([Begin Guild Inspection]) --> P0[Tier 0: Direct Member Query<br/>GET /guilds/{id}/members/{target_id}]
+    START(["Begin Guild Inspection"]) --> P0["Tier 0: Direct Member Query (GET /guilds/:guild_id/members/:target_id)"]
     
-    P0 -->|HTTP 200 Found| CONFIRM0[Confirm Presence: user_id_exact]
-    CONFIRM0 --> AVATAR[Extract Real Discord Avatar CDN Hash<br/>and Guild Nickname / Roles]
-    AVATAR --> DB_PROF[Update Run Target Profile in SQLite]
+    P0 -->|HTTP 200 Found| CONFIRM0["Confirm Presence: user_id_exact"]
+    CONFIRM0 --> AVATAR["Extract Real Discord Avatar CDN Hash and Guild Roles"]
+    AVATAR --> DB_PROF["Update Run Target Profile in SQLite"]
     
-    P0 -->|HTTP 404 / 403| P1[Tier 1: Targeted REST Query<br/>GET /guilds/{id}/members/search?query=...]
+    P0 -->|HTTP 404 or 403| P1["Tier 1: Targeted REST Query (GET /guilds/:guild_id/members/search)"]
     
-    P1 -->|Matched User ID| CONFIRM1[Confirm Presence: user_id_exact]
-    P1 -->|Matched Username Only| CAND1[Record Candidate: username_exact]
-    P1 -->|Fuzzy Nickname Match >= 0.85| CAND2[Record Candidate: nickname_similar]
-    P1 -->|No Member Hit| P2[Tier 2: Guild-Wide Message Probe<br/>GET /guilds/{id}/messages/search?author_id=...]
+    P1 -->|Matched User ID| CONFIRM1["Confirm Presence: user_id_exact"]
+    P1 -->|Matched Username Only| CAND1["Record Candidate: username_exact"]
+    P1 -->|Fuzzy Nickname Match| CAND2["Record Candidate: nickname_similar"]
+    P1 -->|No Member Hit| P2["Tier 2: Guild-Wide Message Probe (GET /guilds/:guild_id/messages/search)"]
     
     DB_PROF --> P2
     CONFIRM1 --> P2
     CAND1 --> P2
     CAND2 --> P2
     
-    P2 -->|Target Author Hit| CONFIRM2[Confirm Presence: message_author_id_exact]
-    CONFIRM2 --> CH_RESOLV[Query GetGuildChannels<br/>Resolve Channel IDs to Names]
-    CH_RESOLV --> MSGS_CSV[Append to Messages Collection<br/>with Guild & Channel Names]
+    P2 -->|Target Author Hit| CONFIRM2["Confirm Presence: message_author_id_exact"]
+    CONFIRM2 --> CH_RESOLV["Query GetGuildChannels to Resolve Channel Names"]
+    CH_RESOLV --> MSGS_CSV["Append to Messages Collection with Guild and Channel Names"]
     
-    P2 -->|0 Messages Returned| COVERAGE[Evaluate Member Coverage<br/>complete vs partial]
-    MSGS_CSV --> SAVE[Commit Transaction to Database]
+    P2 -->|0 Messages Returned| COVERAGE["Evaluate Member Coverage: complete vs partial"]
+    MSGS_CSV --> SAVE["Commit Transaction to SQLite Database"]
     COVERAGE --> SAVE
-    SAVE --> DONE([Inspection Finished])
+    SAVE --> DONE(["Inspection Finished"])
 ```
 
 ---
@@ -234,27 +233,26 @@ When Discord requires a CAPTCHA verification challenge during a guild join reque
 sequenceDiagram
     autonumber
     participant Engine as Workflow Engine
-    participant Discord as Discord Gateway / REST
+    participant Discord as Discord API
     participant Bridge as CAPTCHA Local Bridge (:8765)
-    participant Browser as Operator's Browser
+    participant Browser as Operator Browser
 
-    Engine->>Discord: POST /api/v9/invites/{code}
-    Discord-->>Engine: HTTP 400 Bad Request<br/>{"captcha_key": ["captcha-required"], "captcha_sitekey": "...", "captcha_rqdata": "..."}
+    Engine->>Discord: POST /api/v9/invites/:code
+    Discord-->>Engine: HTTP 400 Bad Request (captcha-required)
     
-    Engine->>Bridge: Start Bridge(Challenge{SiteKey, RqData, SessionID})
-    Bridge->>Browser: Launch system browser at http://127.0.0.1:8765/captcha
+    Engine->>Bridge: Start Bridge with SiteKey, RqData, and SessionID
+    Bridge->>Browser: Launch browser at http://127.0.0.1:8765/captcha
     Browser->>Bridge: GET /captcha
-    Bridge-->>Browser: Serve HTML page with explicit hCaptcha widget script
+    Bridge-->>Browser: Serve HTML page with hCaptcha container
     
-    Browser->>Browser: hCaptcha rendered with dynamic sitekey & rqdata
-    Browser->>Browser: Operator completes interactive image challenge
+    Browser->>Browser: Operator solves interactive image challenge
     
-    Browser->>Bridge: POST /submit {"token": "P1_eyJ..."}
-    Bridge-->>Browser: Display "CAPTCHA Solved! You may close this tab."
-    Bridge-->>Engine: Return Solution{Token, SessionID}
+    Browser->>Bridge: POST /submit with captcha token
+    Bridge-->>Browser: Display completion message
+    Bridge-->>Engine: Return Solution with token and session ID
     
-    Engine->>Discord: POST /api/v9/invites/{code}<br/>Header: X-Captcha-Session-Id<br/>Body: {"captcha_key": "P1_...", "captcha_session_id": "...", "session_id": "..."}
-    Discord-->>Engine: HTTP 200 OK {"guild": {...}} (Joined successfully)
+    Engine->>Discord: POST /api/v9/invites/:code with X-Captcha-Session-Id and captcha_key
+    Discord-->>Engine: HTTP 200 OK Joined successfully
 ```
 
 ---
@@ -267,29 +265,29 @@ Discord servers often guard channels behind membership rules screening, verifica
 stateDiagram-v2
     [*] --> GuildJoined: Successful Invite Join
     
-    GuildJoined --> CheckScreening: Inspect Guild Member 'pending' Flag
+    GuildJoined --> CheckScreening: Inspect Guild Member Pending Status
     
-    CheckScreening --> SubmitScreening: pending == true
-    SubmitScreening --> RulesAccepted: PUT /guilds/{id}/requests/@me
-    CheckScreening --> RulesAccepted: pending == false
+    CheckScreening --> SubmitScreening: Pending is true
+    SubmitScreening --> RulesAccepted: Submit Rules Acceptance Request
+    CheckScreening --> RulesAccepted: Pending is false
     
     RulesAccepted --> InspectChannels: Query Accessible Channels
     
     InspectChannels --> Detection: Analyze Channel Messages for Verification Prompts
     
-    Detection --> EmojiReactionGate: Found Reaction Checkmark (✅)
-    EmojiReactionGate --> ChannelUnlocked: PUT /channels/{id}/messages/{id}/reactions/✅/@me
+    Detection --> EmojiReactionGate: Found Reaction Checkmark Prompt
+    EmojiReactionGate --> ChannelUnlocked: Emulate Checkmark Reaction
     
-    Detection --> ComponentButtonGate: Found Verification Button (type: 3)
-    ComponentButtonGate --> ChannelUnlocked: POST /interactions (Component interaction)
+    Detection --> ComponentButtonGate: Found Verification Button Component
+    ComponentButtonGate --> ChannelUnlocked: Submit Component Button Interaction
     
-    Detection --> ExternalWebGate: Found Verification Link (AltDentifier / Wick)
+    Detection --> ExternalWebGate: Found External Verification Link
     ExternalWebGate --> BrowserOpen: Launch URL in Operator Browser
-    BrowserOpen --> ChannelUnlocked: Manual Operator Confirmation
+    BrowserOpen --> ChannelUnlocked: Operator Confirms Verification
     
-    Detection --> ChannelUnlocked: No Gates Detected
+    Detection --> ChannelUnlocked: No Gates Present
     
-    ChannelUnlocked --> SearchMessages: Execute Message Search Query
+    ChannelUnlocked --> SearchMessages: Execute Target Message Search
     SearchMessages --> [*]
 ```
 
@@ -316,9 +314,9 @@ erDiagram
         string target_display_name
         string target_avatar_url
         string target_resolution_source
-        timestamp target_verified_at
+        string target_verified_at
         string status
-        timestamp created_at
+        string created_at
     }
 
     guild_scans {
@@ -333,8 +331,8 @@ erDiagram
         string best_observed_user_id
         string member_coverage
         int messages_examined
-        timestamp started_at
-        timestamp completed_at
+        string started_at
+        string completed_at
     }
 
     match_observations {
@@ -350,7 +348,7 @@ erDiagram
         string match_status
         string match_reason
         string acquisition_method
-        timestamp observed_at
+        string observed_at
     }
 
     messages {
@@ -364,8 +362,8 @@ erDiagram
         string author_id
         string author_username
         string content
-        timestamp timestamp
-        timestamp collected_at
+        string timestamp
+        string collected_at
         string collector_version
         string acquisition_method
     }
@@ -377,7 +375,7 @@ erDiagram
         string gate_type
         string channel_id
         string action_taken
-        timestamp attempted_at
+        string attempted_at
     }
 ```
 
