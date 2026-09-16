@@ -579,16 +579,31 @@ tr:hover td { background: rgba(255, 255, 255, 0.02); }
   color: var(--text-header);
   font-size: 14.5px;
 }
+.msg-server-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(235, 69, 158, 0.15);
+  color: #fca5d5;
+  border: 1px solid rgba(235, 69, 158, 0.35);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
 .msg-chan-pill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   background: rgba(88, 101, 242, 0.15);
-  color: #a3a9b7;
+  color: #9bb1ff;
+  border: 1px solid rgba(88, 101, 242, 0.35);
   padding: 2px 8px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 11.5px;
   font-family: monospace;
+  font-weight: 500;
 }
 .msg-timestamp {
   color: var(--text-muted);
@@ -983,10 +998,22 @@ function renderRunDetails(data) {
   if (msgs.length === 0) {
     msgsBox.innerHTML = '<div class="empty-state">No message records captured during this run.</div>';
   } else {
+    const scanMap = {};
+    (scans || []).forEach(s => {
+      if (s.guild_id) scanMap[s.guild_id] = s.guild_name || s.guild_id;
+    });
+
     msgsBox.innerHTML = `
       <div class="discord-msg-stream">
         ${msgs.map(m => {
-          const msgAvatar = getDiscordAvatar(null, m.author_id, m.author_username);
+          let msgAvatar = getDiscordAvatar(null, m.author_id, m.author_username);
+          if (run && m.author_id === run.target_user_id && run.target_avatar_url) {
+            msgAvatar = run.target_avatar_url;
+          }
+          const serverName = m.guild_name || scanMap[m.guild_id] || m.guild_id || 'Unknown Server';
+          let channelDisplay = m.channel_name || m.channel_id;
+          if (!channelDisplay.startsWith('#')) channelDisplay = '#' + channelDisplay;
+
           return `
             <div class="discord-msg">
               <div class="msg-avatar">
@@ -995,7 +1022,8 @@ function renderRunDetails(data) {
               <div class="msg-body">
                 <div class="msg-meta-row">
                   <span class="msg-author">${escapeHtml(m.author_username)}</span>
-                  <span class="msg-chan-pill">#${escapeHtml(m.channel_id)}</span>
+                  <span class="msg-server-pill" title="Server Snowflake ID: ${escapeHtml(m.guild_id)}">🏛️ ${escapeHtml(serverName)}</span>
+                  <span class="msg-chan-pill" title="Channel Snowflake ID: ${escapeHtml(m.channel_id)}">${escapeHtml(channelDisplay)}</span>
                   <span class="msg-timestamp">${formatDate(m.timestamp)}</span>
                 </div>
                 <div class="msg-text">${escapeHtml(m.content)}</div>

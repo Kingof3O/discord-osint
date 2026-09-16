@@ -503,6 +503,14 @@ func (e *Engine) processServer(
 	if targetID != "" {
 		collectedMsgs, err := e.discordClient.SearchGuildMessages(ctx, scan.GuildID, targetID, "")
 		if err == nil && len(collectedMsgs) > 0 {
+			// Fetch guild channels to resolve human-readable channel names
+			channelNames := make(map[string]string)
+			if chs, chErr := e.discordClient.GetGuildChannels(ctx, scan.GuildID); chErr == nil {
+				for _, ch := range chs {
+					channelNames[ch.ID] = ch.Name
+				}
+			}
+
 			for _, m := range collectedMsgs {
 				if m.Author.ID == targetID && m.Author.Avatar != "" {
 					ext := "png"
@@ -513,10 +521,14 @@ func (e *Engine) processServer(
 					_ = e.store.UpdateRunTargetProfile(ctx, runID, avatarURL, m.Author.GlobalName)
 				}
 
+				chName := channelNames[m.ChannelID]
+
 				messages = append(messages, store.MessageRecord{
 					RunID:             runID,
 					GuildID:           scan.GuildID,
+					GuildName:         scan.GuildName,
 					ChannelID:         m.ChannelID,
+					ChannelName:       chName,
 					MessageID:         m.ID,
 					AuthorID:          m.Author.ID,
 					AuthorUsername:    m.Author.Username,

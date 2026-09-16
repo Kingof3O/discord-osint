@@ -341,3 +341,72 @@ func TestStore_ListRunsAndLatestIncomplete(t *testing.T) {
 	}
 }
 
+func TestStore_MessageGuildAndChannelNames(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	tgt := target.ConfirmedTarget{
+		TargetUserID:     "target_999",
+		TargetUsername:   "alpha_user",
+		TargetVerifiedAt: time.Now().UTC(),
+	}
+	if err := s.CreateRunAtomic(ctx, "run_msg_test", "tag1", tgt); err != nil {
+		t.Fatalf("CreateRunAtomic failed: %v", err)
+	}
+
+	scan := GuildScanRecord{
+		RunID:          "run_msg_test",
+		GuildID:        "guild_msg_1",
+		GuildName:      "Alpha Guild",
+		ScanStatus:     "complete",
+		MemberCoverage: "complete",
+		StartedAt:      time.Now().UTC(),
+	}
+
+	msg1 := MessageRecord{
+		RunID:             "run_msg_test",
+		GuildID:           "guild_msg_1",
+		GuildName:         "Alpha Guild",
+		ChannelID:         "chan_101",
+		ChannelName:       "general",
+		MessageID:         "m_1",
+		AuthorID:          "target_999",
+		AuthorUsername:    "alpha_user",
+		Content:           "test msg 1",
+		Timestamp:         time.Now().UTC(),
+		CollectedAt:       time.Now().UTC(),
+		CollectorVersion:  "v3.3",
+		AcquisitionMethod: "search_api",
+		CoverageStatus:    "bounded",
+	}
+
+	if err := s.RecordGuildScanTransaction(ctx, scan, nil, []MessageRecord{msg1}); err != nil {
+		t.Fatalf("RecordGuildScanTransaction failed: %v", err)
+	}
+
+	msgs, err := s.GetRunMessages(ctx, "run_msg_test")
+	if err != nil {
+		t.Fatalf("GetRunMessages failed: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	if msgs[0].GuildName != "Alpha Guild" || msgs[0].ChannelName != "general" {
+		t.Errorf("unexpected message names: guild=%q, chan=%q", msgs[0].GuildName, msgs[0].ChannelName)
+	}
+
+	// Test UpdateMessageMetadata
+	if err := s.UpdateMessageMetadata(ctx, "run_msg_test", "guild_msg_1", "chan_101", "Alpha Guild Updated", "general-chat"); err != nil {
+		t.Fatalf("UpdateMessageMetadata failed: %v", err)
+	}
+
+	msgs, err = s.GetRunMessages(ctx, "run_msg_test")
+	if err != nil {
+		t.Fatalf("GetRunMessages after update failed: %v", err)
+	}
+	if msgs[0].GuildName != "Alpha Guild Updated" || msgs[0].ChannelName != "general-chat" {
+		t.Errorf("unexpected updated message names: guild=%q, chan=%q", msgs[0].GuildName, msgs[0].ChannelName)
+	}
+}
+
+

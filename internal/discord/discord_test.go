@@ -297,3 +297,53 @@ func TestTokenScrubber(t *testing.T) {
 		t.Errorf("expected [REDACTED] in output, got: %s", scrubbed)
 	}
 }
+
+func TestClient_GetGuildChannels(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/guilds/g_channels_test/channels") {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]Channel{
+				{ID: "c1", Name: "general", GuildID: "g_channels_test", Type: 0},
+				{ID: "c2", Name: "announcements", GuildID: "g_channels_test", Type: 5},
+			})
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/channels/c1") {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Channel{
+				ID: "c1", Name: "general", GuildID: "g_channels_test", Type: 0,
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer ts.Close()
+
+	client, err := NewClient(ClientOptions{
+		Token:   "dummy_tok",
+		BaseURL: ts.URL,
+	})
+	if err != nil {
+		t.Fatalf("NewClient failed: %v", err)
+	}
+
+	channels, err := client.GetGuildChannels(context.Background(), "g_channels_test")
+	if err != nil {
+		t.Fatalf("GetGuildChannels failed: %v", err)
+	}
+	if len(channels) != 2 {
+		t.Fatalf("expected 2 channels, got %d", len(channels))
+	}
+	if channels[0].Name != "general" || channels[1].Name != "announcements" {
+		t.Errorf("unexpected channels: %+v", channels)
+	}
+
+	ch, err := client.GetChannel(context.Background(), "c1")
+	if err != nil {
+		t.Fatalf("GetChannel failed: %v", err)
+	}
+	if ch.Name != "general" {
+		t.Errorf("expected channel name 'general', got %q", ch.Name)
+	}
+}
+

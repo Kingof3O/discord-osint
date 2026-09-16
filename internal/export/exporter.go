@@ -76,9 +76,16 @@ func ExportArtifacts(ctx context.Context, s *store.Store, runID string, opts Exp
 	}
 	defer csvFile.Close()
 
+	guildNames := make(map[string]string)
+	for _, s := range scans {
+		if s.GuildID != "" && s.GuildName != "" {
+			guildNames[s.GuildID] = s.GuildName
+		}
+	}
+
 	w := csv.NewWriter(csvFile)
 	header := []string{
-		"run_id", "guild_id", "channel_id", "message_id",
+		"run_id", "guild_id", "guild_name", "channel_id", "channel_name", "message_id",
 		"author_id", "author_username", "content",
 		"timestamp", "collected_at", "collector_version",
 		"acquisition_method", "coverage_status",
@@ -88,8 +95,13 @@ func ExportArtifacts(ctx context.Context, s *store.Store, runID string, opts Exp
 	}
 
 	for _, m := range msgs {
+		gName := m.GuildName
+		if gName == "" {
+			gName = guildNames[m.GuildID]
+		}
+		chName := m.ChannelName
 		row := []string{
-			m.RunID, m.GuildID, m.ChannelID, m.MessageID,
+			m.RunID, m.GuildID, gName, m.ChannelID, chName, m.MessageID,
 			m.AuthorID, m.AuthorUsername, m.Content,
 			m.Timestamp.Format(time.RFC3339), m.CollectedAt.Format(time.RFC3339),
 			m.CollectorVersion, m.AcquisitionMethod, m.CoverageStatus,

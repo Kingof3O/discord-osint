@@ -1,6 +1,6 @@
 package store
 
-const currentSchemaVersion = 1
+const currentSchemaVersion = 2
 
 const schemaV1 = `
 CREATE TABLE IF NOT EXISTS runs (
@@ -84,7 +84,9 @@ CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id TEXT NOT NULL,
     guild_id TEXT NOT NULL,
+    guild_name TEXT NOT NULL DEFAULT '',
     channel_id TEXT NOT NULL,
+    channel_name TEXT NOT NULL DEFAULT '',
     message_id TEXT NOT NULL,
     author_id TEXT NOT NULL,
     author_username TEXT NOT NULL,

@@ -125,13 +125,32 @@ func GenerateMarkdownReport(
 	if len(messages) == 0 {
 		b.WriteString("No messages were collected during this run.\n\n")
 	} else {
+		guildNamesMD := make(map[string]string)
+		for _, s := range scans {
+			if s.GuildID != "" && s.GuildName != "" {
+				guildNamesMD[s.GuildID] = s.GuildName
+			}
+		}
+
 		b.WriteString(fmt.Sprintf("Total Messages Captured: **%d**\n\n", len(messages)))
 		limit := 10
 		if len(messages) < limit {
 			limit = len(messages)
 		}
 		for _, m := range messages[:limit] {
-			b.WriteString(fmt.Sprintf("> **[%s] %s** (Channel: `%s`)\n", m.Timestamp.Format(time.RFC3339), m.AuthorUsername, m.ChannelID))
+			srvName := m.GuildName
+			if srvName == "" {
+				if g, ok := guildNamesMD[m.GuildID]; ok && g != "" {
+					srvName = g
+				} else {
+					srvName = m.GuildID
+				}
+			}
+			chLabel := m.ChannelName
+			if chLabel == "" {
+				chLabel = m.ChannelID
+			}
+			b.WriteString(fmt.Sprintf("> **[%s] %s** (Server: **%s**, Channel: `#%s`)\n", m.Timestamp.Format(time.RFC3339), m.AuthorUsername, srvName, strings.TrimPrefix(chLabel, "#")))
 			b.WriteString(fmt.Sprintf("> %s\n\n", m.Content))
 		}
 		if len(messages) > limit {
@@ -727,16 +746,31 @@ tr:hover td { background: rgba(255, 255, 255, 0.02); }
   color: var(--text-header);
   font-size: 14.5px;
 }
+.msg-server-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(235, 69, 158, 0.15);
+  color: #fca5d5;
+  border: 1px solid rgba(235, 69, 158, 0.35);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
 .msg-chan-pill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   background: rgba(88, 101, 242, 0.15);
-  color: #a3a9b7;
+  color: #9bb1ff;
+  border: 1px solid rgba(88, 101, 242, 0.35);
   padding: 2px 8px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 11.5px;
   font-family: monospace;
+  font-weight: 500;
 }
 .msg-timestamp {
   color: var(--text-muted);
@@ -992,6 +1026,13 @@ footer {
 	if len(messages) == 0 {
 		b.WriteString(`<p style="color: var(--text-muted); font-size: 14px; text-align: center; padding: 24px;">No message records captured during this investigation run.</p>`)
 	} else {
+		guildNamesHTML := make(map[string]string)
+		for _, s := range scans {
+			if s.GuildID != "" && s.GuildName != "" {
+				guildNamesHTML[s.GuildID] = s.GuildName
+			}
+		}
+
 		b.WriteString(`<div class="discord-msg-stream">`)
 		for _, m := range messages {
 			msgInitial := "U"
@@ -1008,6 +1049,25 @@ footer {
 				}
 			}
 
+			serverName := m.GuildName
+			if serverName == "" {
+				if gName, ok := guildNamesHTML[m.GuildID]; ok && gName != "" {
+					serverName = gName
+				} else if m.GuildID != "" {
+					serverName = m.GuildID
+				} else {
+					serverName = "Unknown Server"
+				}
+			}
+
+			channelDisplay := m.ChannelName
+			if channelDisplay == "" {
+				channelDisplay = m.ChannelID
+			}
+			if !strings.HasPrefix(channelDisplay, "#") {
+				channelDisplay = "#" + channelDisplay
+			}
+
 			b.WriteString(fmt.Sprintf(`
         <div class="discord-msg">
           <div class="msg-avatar">
@@ -1016,7 +1076,8 @@ footer {
           <div class="msg-body">
             <div class="msg-meta-row">
               <span class="msg-author">%s</span>
-              <span class="msg-chan-pill">#%s</span>
+              <span class="msg-server-pill" title="Server Snowflake ID: %s">🏛️ %s</span>
+              <span class="msg-chan-pill" title="Channel Snowflake ID: %s">%s</span>
               <span class="msg-timestamp">%s</span>
             </div>
             <div class="msg-text">%s</div>
@@ -1026,7 +1087,10 @@ footer {
 				htmlEscape(m.AuthorUsername),
 				htmlEscape(msgInitial),
 				htmlEscape(m.AuthorUsername),
+				htmlEscape(m.GuildID),
+				htmlEscape(serverName),
 				htmlEscape(m.ChannelID),
+				htmlEscape(channelDisplay),
 				htmlEscape(m.Timestamp.Format("2006-01-02 15:04:05 UTC")),
 				htmlEscape(m.Content),
 			))

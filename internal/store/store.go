@@ -65,6 +65,15 @@ func (s *Store) migrate() error {
 		if _, err := s.db.Exec(fmt.Sprintf("PRAGMA user_version = %d", currentSchemaVersion)); err != nil {
 			return fmt.Errorf("failed to set pragma user_version: %w", err)
 		}
+		return nil
+	}
+
+	if version < 2 {
+		_, _ = s.db.Exec("ALTER TABLE messages ADD COLUMN guild_name TEXT NOT NULL DEFAULT '';")
+		_, _ = s.db.Exec("ALTER TABLE messages ADD COLUMN channel_name TEXT NOT NULL DEFAULT '';")
+		if _, err := s.db.Exec(fmt.Sprintf("PRAGMA user_version = %d", currentSchemaVersion)); err != nil {
+			return fmt.Errorf("failed to set pragma user_version: %w", err)
+		}
 	}
 
 	return nil
@@ -362,13 +371,15 @@ func (s *Store) RecordGuildScanTransaction(
 		}
 	}
 
-	// 3. Insert Messages (ON CONFLICT DO NOTHING - idempotency)
+	// 3. Insert Messages (ON CONFLICT DO UPDATE - idempotency & metadata enrichment)
 	msgQuery := `
 	INSERT INTO messages (
-		run_id, guild_id, channel_id, message_id, author_id, author_username,
+		run_id, guild_id, guild_name, channel_id, channel_name, message_id, author_id, author_username,
 		content, timestamp, collected_at, collector_version, acquisition_method, coverage_status
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	ON CONFLICT (run_id, guild_id, channel_id, message_id) DO NOTHING;
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	ON CONFLICT (run_id, guild_id, channel_id, message_id) DO UPDATE SET
+		guild_name = CASE WHEN excluded.guild_name != '' THEN excluded.guild_name ELSE messages.guild_name END,
+		channel_name = CASE WHEN excluded.channel_name != '' THEN excluded.channel_name ELSE messages.channel_name END;
 	`
 	msgStmt, err := tx.PrepareContext(ctx, msgQuery)
 	if err != nil {
@@ -377,8 +388,12 @@ func (s *Store) RecordGuildScanTransaction(
 	defer msgStmt.Close()
 
 	for _, msg := range messages {
+		gName := msg.GuildName
+		if gName == "" {
+			gName = scan.GuildName
+		}
 		_, err := msgStmt.ExecContext(ctx,
-			msg.RunID, msg.GuildID, msg.ChannelID, msg.MessageID, msg.AuthorID, msg.AuthorUsername,
+			msg.RunID, msg.GuildID, gName, msg.ChannelID, msg.ChannelName, msg.MessageID, msg.AuthorID, msg.AuthorUsername,
 			msg.Content, msg.Timestamp.Format(time.RFC3339), msg.CollectedAt.Format(time.RFC3339),
 			msg.CollectorVersion, msg.AcquisitionMethod, msg.CoverageStatus,
 		)
@@ -515,7 +530,8 @@ func (s *Store) GetRunObservations(ctx context.Context, runID string) ([]Observa
 // GetRunMessages returns all collected messages for a run.
 func (s *Store) GetRunMessages(ctx context.Context, runID string) ([]MessageRecord, error) {
 	query := `
-	SELECT run_id, guild_id, channel_id, message_id, author_id, author_username,
+	SELECT run_id, guild_id, COALESCE(guild_name, ''), channel_id, COALESCE(channel_name, ''),
+	       message_id, author_id, author_username,
 	       content, timestamp, collected_at, collector_version, acquisition_method, coverage_status
 	FROM messages
 	WHERE run_id = ?
@@ -532,7 +548,7 @@ func (s *Store) GetRunMessages(ctx context.Context, runID string) ([]MessageReco
 		var m MessageRecord
 		var tsStr, colStr string
 		err := rows.Scan(
-			&m.RunID, &m.GuildID, &m.ChannelID, &m.MessageID, &m.AuthorID, &m.AuthorUsername,
+			&m.RunID, &m.GuildID, &m.GuildName, &m.ChannelID, &m.ChannelName, &m.MessageID, &m.AuthorID, &m.AuthorUsername,
 			&m.Content, &tsStr, &colStr, &m.CollectorVersion, &m.AcquisitionMethod, &m.CoverageStatus,
 		)
 		if err != nil {
@@ -543,4 +559,16 @@ func (s *Store) GetRunMessages(ctx context.Context, runID string) ([]MessageReco
 		msgs = append(msgs, m)
 	}
 	return msgs, nil
+}
+
+// UpdateMessageMetadata updates the guild name and channel name for messages in a run matching a channel ID.
+func (s *Store) UpdateMessageMetadata(ctx context.Context, runID, guildID, channelID, guildName, channelName string) error {
+	query := `
+	UPDATE messages
+	SET guild_name = CASE WHEN ? != '' THEN ? ELSE guild_name END,
+	    channel_name = CASE WHEN ? != '' THEN ? ELSE channel_name END
+	WHERE run_id = ? AND guild_id = ? AND channel_id = ?;
+	`
+	_, err := s.db.ExecContext(ctx, query, guildName, guildName, channelName, channelName, runID, guildID, channelID)
+	return err
 }

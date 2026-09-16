@@ -82,7 +82,9 @@ type GuildScanRecord struct {
 type MessageRecord struct {
 	RunID             string    `json:"run_id"`
 	GuildID           string    `json:"guild_id"`
+	GuildName         string    `json:"guild_name,omitempty"`
 	ChannelID         string    `json:"channel_id"`
+	ChannelName       string    `json:"channel_name,omitempty"`
 	MessageID         string    `json:"message_id"`
 	AuthorID          string    `json:"author_id"`
 	AuthorUsername    string    `json:"author_username"`

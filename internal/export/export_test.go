@@ -67,7 +67,9 @@ func TestExportArtifacts(t *testing.T) {
 	msg := store.MessageRecord{
 		RunID:             runID,
 		GuildID:           "guild_101",
+		GuildName:         "Test Gaming Guild",
 		ChannelID:         "chan_general",
+		ChannelName:       "general-chat",
 		MessageID:         "msg_001",
 		AuthorID:          "123456789012345678",
 		AuthorUsername:    "john.doe",
@@ -107,19 +109,19 @@ func TestExportArtifacts(t *testing.T) {
 
 	// Verify messages.csv
 	csvBytes, err := os.ReadFile(filepath.Join(outDir, "messages.csv"))
-	if err != nil || !strings.Contains(string(csvBytes), "Hello world in gaming guild!") {
+	if err != nil || !strings.Contains(string(csvBytes), "Hello world in gaming guild!") || !strings.Contains(string(csvBytes), "general-chat") {
 		t.Errorf("invalid messages.csv content: %s", string(csvBytes))
 	}
 
 	// Verify report.md
 	reportBytes, err := os.ReadFile(filepath.Join(outDir, "report.md"))
-	if err != nil || !strings.Contains(string(reportBytes), "Confirmed Target Presence") {
+	if err != nil || !strings.Contains(string(reportBytes), "Confirmed Target Presence") || !strings.Contains(string(reportBytes), "Test Gaming Guild") {
 		t.Errorf("invalid report.md content: %s", string(reportBytes))
 	}
 
 	// Verify report.html
 	htmlBytes, err := os.ReadFile(filepath.Join(outDir, "report.html"))
-	if err != nil || !strings.Contains(string(htmlBytes), "Discord OSINT Report") || !strings.Contains(string(htmlBytes), "badge-confirmed") {
+	if err != nil || !strings.Contains(string(htmlBytes), "Discord OSINT Report") || !strings.Contains(string(htmlBytes), "badge-confirmed") || !strings.Contains(string(htmlBytes), "msg-server-pill") || !strings.Contains(string(htmlBytes), "general-chat") {
 		t.Errorf("invalid report.html content: %s", string(htmlBytes))
 	}
 }

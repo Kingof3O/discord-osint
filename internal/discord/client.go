@@ -557,6 +557,66 @@ func (c *Client) SearchGuildMessages(ctx context.Context, guildID string, author
 	return flatMessages, nil
 }
 
+// GetGuildChannels retrieves all channels for a guild.
+func (c *Client) GetGuildChannels(ctx context.Context, guildID string) ([]Channel, error) {
+	endpoint := fmt.Sprintf("%s/guilds/%s/channels", c.baseURL, guildID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.do(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusForbidden {
+		return nil, ErrForbidden
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get guild channels failed (%d): %s", resp.StatusCode, c.scrubber.Scrub(string(body)))
+	}
+
+	var channels []Channel
+	if err := json.NewDecoder(resp.Body).Decode(&channels); err != nil {
+		return nil, fmt.Errorf("failed to decode guild channels: %w", err)
+	}
+
+	return channels, nil
+}
+
+// GetChannel retrieves a single channel by ID.
+func (c *Client) GetChannel(ctx context.Context, channelID string) (*Channel, error) {
+	endpoint := fmt.Sprintf("%s/channels/%s", c.baseURL, channelID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.do(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusForbidden {
+		return nil, ErrForbidden
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get channel failed (%d): %s", resp.StatusCode, c.scrubber.Scrub(string(body)))
+	}
+
+	var ch Channel
+	if err := json.NewDecoder(resp.Body).Decode(&ch); err != nil {
+		return nil, fmt.Errorf("failed to decode channel: %w", err)
+	}
+
+	return &ch, nil
+}
+
 // GetChannelMessages retrieves recent messages from a channel.
 func (c *Client) GetChannelMessages(ctx context.Context, channelID string, limit int) ([]DiscordMessage, error) {
 	if limit <= 0 {
