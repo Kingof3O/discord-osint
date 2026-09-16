@@ -65,7 +65,7 @@ graph TD
   - **Tier 1**: Executes REST search queries (`GET /guilds/:guild_id/members/search?query=target`) up to pagination bounds.
   - **Tier 2**: Executes guild-wide message search (`GET /guilds/:guild_id/messages/search?author_id=:id&include_nsfw=true`).
 - **Channel Resolution**:
-  Queries `GET /guilds/:guild_id/channels` to map channel Snowflake IDs to human-readable names (`#🌸・chat`, `#request-channel`).
+  Queries `GET /guilds/:guild_id/channels` to map channel Snowflake IDs to human-readable names (`#general-chat`, `#announcements`).
 
 ### 2.3 `internal/captcha` &mdash; Interactive Solver Bridge
 

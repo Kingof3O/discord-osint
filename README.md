@@ -35,7 +35,7 @@ A hardened, production-grade Discord OSINT (Open Source Intelligence) reconnaiss
 - **Dynamic Real Avatar CDN Resolution**:
   - Performs direct guild member queries upon joining to obtain authoritative Discord user profiles, global display names, and high-resolution avatar CDN hashes (`https://cdn.discordapp.com/avatars/{id}/{hash}.png?size=256`).
 - **Human-Readable Channel & Server Mapping**:
-  - Automatically queries Discord's channel hierarchy (`GetGuildChannels`) to resolve raw Snowflake IDs into real channel names (e.g. `#🌸・chat`, `#request-channel`, `#・ᰔ┊dm-and-fr-requests`) and pairs them with official server titles across all HTML, CSV, and Markdown exports.
+  - Automatically queries Discord's channel hierarchy (`GetGuildChannels`) to resolve raw Snowflake IDs into real channel names (e.g. `#general-chat`, `#announcements`, `#member-lounge`) and pairs them with official server titles across all HTML, CSV, and Markdown exports.
 - **Two-Tier Member Discovery & Full Author Probe**:
   - Combines REST targeted member queries (`/guilds/{id}/members/search`) with guild-wide author message search (`/guilds/{id}/messages/search?include_nsfw=true`) to discover users even in silent, unindexed, or massive servers.
 - **Interactive CAPTCHA & Cloudflare Bridge**:
@@ -439,7 +439,7 @@ Execute an end-to-end OSINT search walk:
 ./bin/discord-osint search \
   --invites-file invites.txt \
   --username "target_user" \
-  --user-id "1533658238715695116" \
+  --user-id "123456789012345678" \
   --stay \
   --yes
 ```
@@ -459,7 +459,7 @@ Execute an end-to-end OSINT search walk:
 Re-generate all forensic artifacts for a historical run:
 
 ```bash
-./bin/discord-osint export --run-id run_1789521895 -o exports_custom/
+./bin/discord-osint export --run-id run_1700000000 -o exports_custom/
 ```
 
 ### 3. `ui` &mdash; Real-Time Investigation Dashboard
@@ -489,7 +489,7 @@ Resume an interrupted or rate-limited scan without re-scanning completed servers
 ./bin/discord-osint resume
 
 # Or resume a specific run ID:
-./bin/discord-osint resume run_1789521895
+./bin/discord-osint resume run_1700000000
 ```
 
 ### 6. `verify` &mdash; Read-Only Target Preflight
@@ -497,7 +497,7 @@ Resume an interrupted or rate-limited scan without re-scanning completed servers
 Perform a standalone target resolution preflight with zero database or file writes:
 
 ```bash
-./bin/discord-osint verify --user-id "1533658238715695116" --username "target_user"
+./bin/discord-osint verify --user-id "123456789012345678" --username "target_user"
 ```
 
 ---
@@ -507,7 +507,7 @@ Perform a standalone target resolution preflight with zero database or file writ
 Every run creates a dedicated export directory `exports_run_<timestamp>/` containing verifiable evidence files:
 
 ```
-exports_run_1789521895/
+exports_run_1700000000/
 ├── report.html         # Standalone Glassmorphic visual report
 ├── report.md           # Executive markdown summary
 ├── messages.csv        # RFC4180 CSV with server & channel names
@@ -522,8 +522,8 @@ exports_run_1789521895/
 - **Identity Observations**: Server nicknames, guild join dates, and assigned role IDs.
 - **Authentic Chat Stream**:
   - Author avatar & handle.
-  - Server pill: `<span class="msg-server-pill">🏛️ Cornhub</span>`
-  - Channel pill: `<span class="msg-chan-pill">#🌸・chat</span>`
+  - Server pill: `<span class="msg-server-pill">🏛️ Community Hub</span>`
+  - Channel pill: `<span class="msg-chan-pill">#general-chat</span>`
   - Message timestamp and escaped raw message content.
 
 ---

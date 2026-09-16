@@ -8,7 +8,7 @@
  *
  * Usage:
  *   # 1. Resolve Disboard server link(s) or IDs:
- *   node scripts/resolve-disboard.js https://disboard.org/server/1164734637927571477
+ *   node scripts/resolve-disboard.js https://disboard.org/server/123456789012345678
  *
  *   # 2. Or pass a file with server names / URLs / IDs (one per line):
  *   node scripts/resolve-disboard.js -f servers.txt -o invites.txt
@@ -372,7 +372,7 @@ Disboard -> discord.gg Automated Resolver
 
 Usage:
   # Resolve Disboard server link(s):
-  node scripts/resolve-disboard.js https://disboard.org/server/1164734637927571477
+  node scripts/resolve-disboard.js https://disboard.org/server/123456789012345678
 
   # Read server links or names from a file:
   node scripts/resolve-disboard.js -f servers.txt -o invites.txt
